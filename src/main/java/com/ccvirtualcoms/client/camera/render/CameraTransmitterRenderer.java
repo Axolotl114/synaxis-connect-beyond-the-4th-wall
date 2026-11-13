@@ -68,7 +68,7 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
 
         // Local yaw relative to the facing already applied above (model front = north/-Z).
         pose.pushPose();
-        pivotRotate(pose, Axis.YP, (float) (facing.toYRot() - yaw), 8.0D, YAW_PIVOT, 8.0D);
+        pivotRotate(pose, Axis.YP, (float) (facing.toYRot() - yaw + 180.0D), 8.0D, YAW_PIVOT, 8.0D);
         draw("yaw", pose, buffers, state, packedLight, packedOverlay);
 
         // Pitch: model +X looks up, Minecraft pitch positive looks down.
@@ -92,6 +92,7 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
     }
 
     private static void applyFacing(PoseStack pose, Direction facing) {
+        pose.translate(0.5D, 0.0D, 0.5D);
         switch (facing) {
             case SOUTH -> pose.mulPose(Axis.YP.rotationDegrees(180.0F));
             case EAST -> pose.mulPose(Axis.YP.rotationDegrees(90.0F));
@@ -101,6 +102,7 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
             default -> {
             }
         }
+        pose.translate(-0.5D, 0.0D, -0.5D);
     }
 
     private static void pivotRotate(PoseStack pose, com.mojang.math.Axis axis, float degrees,
@@ -116,8 +118,7 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
         if (model == null) {
             return;
         }
-        VertexConsumer consumer = buffers.getBuffer(
-                "status_led_on".equals(part) ? RenderType.cutout() : RenderType.solid());
+        VertexConsumer consumer = buffers.getBuffer(RenderType.cutout());
         RandomSource random = RandomSource.create(42L);
         for (BakedQuad quad : model.getQuads(state, null, random)) {
             consumer.putBulkData(pose.last(), quad, 1.0F, 1.0F, 1.0F, 1.0F, packedLight, packedOverlay);
