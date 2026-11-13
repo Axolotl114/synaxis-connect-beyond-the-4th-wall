@@ -530,6 +530,8 @@ public class CameraTransmitterScreen extends Screen {
         }
         int fov = this.parseOrDefault(value, this.config.fov());
         this.markChanged(this.config.withFov(fov));
+        com.ccvirtualcoms.CCVirtualComs.LOGGER.info("[camera-gui] fov changed: text={} parsed={} config.fov={}",
+                value, fov, this.config.fov());
         this.flush();
         // FOV is a single value the user expects to see applied immediately; bypass the debounce.
         this.flush();
