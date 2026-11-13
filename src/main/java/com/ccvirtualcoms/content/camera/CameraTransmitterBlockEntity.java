@@ -509,6 +509,16 @@ public class CameraTransmitterBlockEntity extends BlockEntity
         }
     }
 
+    /** Direct client edit of the camera Euler angles (yaw/pitch/roll in degrees). */
+    public void applyEulerAngles(double yaw, double pitch, double roll) {
+        this.eulerYaw = normalizeYaw(yaw);
+        this.eulerPitch = clampPitch(pitch);
+        this.eulerRoll = normalizeRoll(roll);
+        this.revision++;
+        this.setStatus("Camera angles edited");
+        this.broadcastStatus();
+    }
+
     private void setStatus(String message) {
         this.statusDetail = message;
     }
