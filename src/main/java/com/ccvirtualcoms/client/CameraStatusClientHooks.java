@@ -26,7 +26,8 @@ public final class CameraStatusClientHooks {
         CameraTransmitterBlockEntity camera = CameraLocator.find(minecraft.level, payload.pos());
         if (camera != null) {
             camera.applyStatusSnapshot(payload.config(), payload.status(), payload.deviceName(),
-                    payload.streamUrl(), payload.redstoneSignal(), payload.revision(), payload.detail());
+                    payload.streamUrl(), payload.redstoneSignal(), payload.revision(), payload.detail(),
+                    payload.eulerYaw(), payload.eulerPitch(), payload.eulerRoll());
         }
     }
 }

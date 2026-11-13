@@ -67,16 +67,13 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
         double roll = camera.eulerAngles()[2];
 
         // Local yaw relative to the facing already applied above (model front = north/-Z).
-        pose.mulPose(Axis.YP.rotationDegrees((float) (facing.toYRot() - yaw)));
-
         pose.pushPose();
-        pivot(pose, 8.0D, YAW_PIVOT, 8.0D);
+        pivotRotate(pose, Axis.YP, (float) (facing.toYRot() - yaw), 8.0D, YAW_PIVOT, 8.0D);
         draw("yaw", pose, buffers, state, packedLight, packedOverlay);
 
         // Pitch: model +X looks up, Minecraft pitch positive looks down.
         pose.pushPose();
-        pivot(pose, 8.0D, CAMERA_PIVOT, 8.0D);
-        pose.mulPose(Axis.XP.rotationDegrees((float) -pitch));
+        pivotRotate(pose, Axis.XP, (float) -pitch, 8.0D, CAMERA_PIVOT, 8.0D);
         draw("pitch", pose, buffers, state, packedLight, packedOverlay);
         draw("status_led", pose, buffers, state, packedLight, packedOverlay);
         if (camera.clientStatus() == CameraStreamStatus.STREAMING
@@ -85,8 +82,7 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
         }
 
         pose.pushPose();
-        pivot(pose, 8.0D, CAMERA_PIVOT, 8.0D);
-        pose.mulPose(Axis.ZP.rotationDegrees((float) -roll));
+        pivotRotate(pose, Axis.ZP, (float) -roll, 8.0D, CAMERA_PIVOT, 8.0D);
         draw("roll", pose, buffers, state, packedLight, packedOverlay);
         pose.popPose();
 
@@ -107,8 +103,11 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
         }
     }
 
-    private static void pivot(PoseStack pose, double x, double y, double z) {
+    private static void pivotRotate(PoseStack pose, com.mojang.math.Axis axis, float degrees,
+                                    double x, double y, double z) {
         pose.translate(x / 16.0D, y / 16.0D, z / 16.0D);
+        pose.mulPose(axis.rotationDegrees(degrees));
+        pose.translate(-x / 16.0D, -y / 16.0D, -z / 16.0D);
     }
 
     private static void draw(String part, PoseStack pose, MultiBufferSource buffers, BlockState state,

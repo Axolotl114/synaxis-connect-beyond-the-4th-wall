@@ -235,7 +235,8 @@ public class CameraTransmitterBlockEntity extends BlockEntity
     /** Client side: applies a status snapshot pushed by the server. */
     public void applyStatusSnapshot(CameraConfig snapshotConfig, CameraStreamStatus status,
                                     String deviceName, String streamUrl, int signal, int newRevision,
-                                    String detail) {
+                                    String detail, double snapshotYaw, double snapshotPitch,
+                                    double snapshotRoll) {
         if (newRevision < this.revision) {
             return; // stale snapshot must not roll the configuration back
         }
@@ -246,6 +247,9 @@ public class CameraTransmitterBlockEntity extends BlockEntity
         this.clientDeviceName = deviceName == null ? "" : deviceName;
         this.clientStreamUrl = streamUrl == null ? "" : streamUrl;
         this.redstoneSignal = signal;
+        this.eulerYaw = normalizeYaw(snapshotYaw);
+        this.eulerPitch = clampPitch(snapshotPitch);
+        this.eulerRoll = normalizeRoll(snapshotRoll);
         this.revision = newRevision;
         if (detail != null) {
             this.statusDetail = detail;
