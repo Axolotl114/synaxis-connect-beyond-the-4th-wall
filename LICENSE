@@ -24,15 +24,99 @@ SOFTWARE.
 THIRD-PARTY ART ASSETS
 ================================================================================
 
-The MIT license above covers the source code of this project.
+The MIT license above covers the source code of this project. It does NOT cover
+the third-party art assets described below.
 
-The block model and the textures shipped under
-src/main/resources/assets/cc_virtual_coms/ are DERIVED FROM the Synaxis mod
-by Rew1nd, which is licensed "All Rights Reserved". They are NOT covered by
-the MIT license above and remain subject to the original author's terms.
+--------------------------------------------------------------------------------
+1. GUI TEXTURES - REUSED FROM SYNAXIS, WITH PERMISSION
+--------------------------------------------------------------------------------
+
+The GUI textures shipped under
+src/main/resources/assets/cc_virtual_coms/textures/gui/ are REUSED FROM the
+Synaxis mod (modId "synaxis") by Rew1nd.
+
+Synaxis is licensed "All Rights Reserved". These GUI textures are reused in
+this project WITH THE EXPLICIT PERMISSION of the Synaxis author (Rew1nd).
+Copyright in these textures remains with the original author. They are NOT
+covered by the MIT license above and may not be extracted and reused
+separately from this project without the original author's permission.
+
+--------------------------------------------------------------------------------
+2. BLOCK MODEL AND BLOCK TEXTURES - REDRAWN DERIVATIVE WORKS
+--------------------------------------------------------------------------------
+
+The block model and the three block textures shipped under
+src/main/resources/assets/cc_virtual_coms/textures/block/virtual_coms_board/
+(base.png, pins.png, chip.png) are derivative works: they were redrawn and
+recoloured for this project, taking the Synaxis mod by Rew1nd as reference.
+
+They differ substantially from the unmodified originals shipped inside
+synaxis-1.4.3.jar. Per-pixel differences measured against those originals
+(RGBA, byte-exact comparison):
+
+    base.png   16x16     251 /  256 pixels differ  ( 98.05%)
+    pins.png   16x16     256 /  256 pixels differ  (100.00%)  [fully redrawn]
+    chip.png   64x64    1055 / 4096 pixels differ  ( 25.76%)
+
+They are NOT the original files. They are NOT covered by the MIT license above
+and remain subject to the original author's terms.
+
+--------------------------------------------------------------------------------
+3. NEW BLOCKS (e.g. camera_transmitter) - NO SYNAXIS BLOCK ASSETS
+--------------------------------------------------------------------------------
+
+Blocks added by this project, including the camera_transmitter block, DO NOT
+reuse Synaxis block models or Synaxis block textures. New blocks that reuse a
+vanilla Minecraft model (for example "minecraft:block/observer") reference it by
+resource location only; no Mojang asset files are copied or redistributed in
+this project's jar. Apart from the GUI textures described in section 1 (reused
+with permission) and the derivative block art described in section 2, no
+Synaxis assets are used anywhere in this project.
+
+--------------------------------------------------------------------------------
 
 If you are the author of Synaxis and would like this attribution changed, or
 if you believe these assets should not be distributed here, please open an
 issue and it will be resolved promptly.
 
 See the Credits section of README.md for details.
+
+================================================================================
+第三方美术素材（中文对照）
+================================================================================
+
+上述 MIT 许可只覆盖本项目的源代码，不覆盖下列第三方美术素材。
+
+一、GUI 贴图 —— 复用自 Synaxis，已获授权
+
+  src/main/resources/assets/cc_virtual_coms/textures/gui/ 下的 GUI 贴图
+  复用自 Rew1nd 的 Synaxis 模组（modId "synaxis"）。
+
+  Synaxis 采用 "All Rights Reserved" 许可。本项目复用这些 GUI 贴图已获得
+  Synaxis 作者（Rew1nd）的明确授权。素材版权仍归原作者所有，不受上述 MIT
+  许可覆盖；未经原作者许可，不得从本项目单独提取再复用。
+
+二、方块模型与方块贴图 —— 重新制作的衍生作品
+
+  src/main/resources/assets/cc_virtual_coms/textures/block/virtual_coms_board/
+  下的方块模型与三张贴图（base.png / pins.png / chip.png）是本项目以 Rew1nd
+  的 Synaxis 模组为参考重新绘制、重新上色的衍生作品，与 synaxis-1.4.3.jar
+  内的原版存在实质差异（RGBA 逐像素比对）：
+
+      base.png   16x16     251 /  256 像素不同（ 98.05%）
+      pins.png   16x16     256 /  256 像素不同（100.00%）[完全重画]
+      chip.png   64x64    1055 / 4096 像素不同（ 25.76%）
+
+  它们不是原文件，且不受上述 MIT 许可覆盖，仍受原作者条款约束。
+
+三、新增方块（例如 camera_transmitter）—— 不使用 Synaxis 方块素材
+
+  本项目新增方块（含图传摄像头 camera_transmitter）不复用 Synaxis 的方块
+  模型与方块贴图。新增方块若复用原版 Minecraft 模型（例如
+  "minecraft:block/observer"），只以资源位置引用，不在本项目 jar 内拷贝或
+  重分发任何 Mojang 素材文件。除第一节所述 GUI 贴图（已获授权复用）与第二节
+  所述衍生方块美术外，本项目不使用任何其他 Synaxis 素材。
+
+若您是 Synaxis 作者且希望修改署名或停止分发，请开 issue，我们会尽快处理。
+
+完整说明同时见 README.md 的「致谢」一节。
