@@ -80,6 +80,7 @@ public final class CameraCapturePipeline {
     private PendingCapture pending;
     private boolean capturing;
     private int captureFov;
+    private int loggedCaptureFov = -1;
     private boolean savedBobView;
     private int savedHurtTime;
     private int savedHurtDuration;
@@ -266,6 +267,11 @@ public final class CameraCapturePipeline {
         this.pending = new PendingCapture(best, bestSession, resolution.width(),
                 resolution.height(), now);
         this.captureFov = config.fov();
+        if (this.captureFov != this.loggedCaptureFov) {
+            this.loggedCaptureFov = this.captureFov;
+            CCVirtualComs.LOGGER.info("[camera] capture frame forced FOV = {} (player FOV untouched)",
+                    this.captureFov);
+        }
         this.isolatePlayerCameraFeedback(minecraft);
     }
 
