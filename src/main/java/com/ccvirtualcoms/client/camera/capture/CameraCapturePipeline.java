@@ -219,10 +219,6 @@ public final class CameraCapturePipeline {
                 || minecraft.screen != null) {
             return;
         }
-        // The previous full player frame is what gets held on the screen during a capture frame.
-        if (!this.frameBackup.hasFrame()) {
-            return;
-        }
         long now = System.nanoTime();
         // Adaptive capture rate: stream at 30 fps only while somebody watches (MJPEG/DirectShow),
         // otherwise idle at 5 fps so an unwatched camera does not keep re-rendering the world.
@@ -325,12 +321,22 @@ public final class CameraCapturePipeline {
             this.override = null;
             this.pending = null;
             this.captureFov = 0;
+            this.restorePlayerCameraFeedback(minecraft);
+            // The camera view replaced this frame's player world. Render the player's world again so
+            // the presented frame is the current one (no duplicated/hold frames -> no judder); the
+            // hand is still disabled here and is drawn once by the outer frame afterwards.
+            boolean previousCapturing = this.capturing;
+            this.capturing = true;
+            try {
+                minecraft.gameRenderer.renderLevel(minecraft.getTimer());
+            } catch (RuntimeException failure) {
+                CCVirtualComs.LOGGER.warn("[camera] player frame re-render failed: {}", failure.toString());
+            } finally {
+                this.capturing = previousCapturing;
+            }
             if (minecraft.gameRenderer instanceof com.ccvirtualcoms.mixin.client.GameRendererAccess access) {
                 access.ccvc$setRenderHand(this.savedRenderHand);
             }
-            this.restorePlayerCameraFeedback(minecraft);
-            // Hold the previous complete player frame on screen (frame hold, not a flash).
-            this.frameBackup.restore(minecraft);
             // The capture frame moved the real camera; put it back for hand/HUD rendering.
             var entity = minecraft.getCameraEntity() == null ? minecraft.player : minecraft.getCameraEntity();
             if (entity != null && minecraft.level != null) {
