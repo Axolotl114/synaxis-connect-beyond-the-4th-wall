@@ -129,11 +129,11 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
         VertexConsumer consumer = buffers.getBuffer(RenderType.cutout());
         RandomSource random = RandomSource.create(42L);
         for (BakedQuad quad : model.getQuads(state, null, random)) {
-            consumer.putBulkData(pose.last(), quad, 1.0F, 1.0F, 1.0F, 1.0F, light, packedOverlay);
+            consumer.putBulkData(pose.last(), quad, 1.0F, 1.0F, 1.0F, 1.0F, packedLight, packedOverlay);
         }
         for (Direction direction : Direction.values()) {
             for (BakedQuad quad : model.getQuads(state, direction, random)) {
-                consumer.putBulkData(pose.last(), quad, 1.0F, 1.0F, 1.0F, 1.0F, light, packedOverlay);
+                consumer.putBulkData(pose.last(), quad, 1.0F, 1.0F, 1.0F, 1.0F, packedLight, packedOverlay);
             }
         }
     }
