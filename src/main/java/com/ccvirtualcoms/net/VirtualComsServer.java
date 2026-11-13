@@ -4,6 +4,7 @@ import com.ccvirtualcoms.content.PortDirection;
 import com.ccvirtualcoms.content.PortType;
 import com.ccvirtualcoms.content.PortValues;
 import com.ccvirtualcoms.content.SerialPort;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.verr1.synaxis.foundation.cimulink.core.signal.SignalValue;
 import java.io.BufferedInputStream;
@@ -249,6 +250,73 @@ public final class VirtualComsServer {
                 LOGGER.warn("Board {} failed to tick: {}", device.comId(), ex.toString());
             }
         }
+    }
+
+    // ------------------------------------------------------------------ camera list
+
+    /** How often the camera list is re-pushed to connected external programs, in ticks. */
+    private static final int CAMERA_LIST_INTERVAL_TICKS = 20;
+
+    private long serverTicks;
+    private int lastCameraListSessions = -1;
+
+    /**
+     * Pushes the camera transmitter list to every connected out-of-game program.
+     *
+     * <p>Camera metadata is additive: it rides {@link Protocol#MSG_CAMERA_LIST}, a new push-only
+     * message type. The JSON frame format and {@link Protocol#VERSION} are unchanged, and old
+     * clients simply ignore the unknown type. Video frames are never sent here; they are served by
+     * the separate loopback MJPEG server.
+     *
+     * <p>Runs on the server thread; only immutable snapshot data crosses into the socket layer.
+     */
+    public void tickCameraList() {
+        this.serverTicks++;
+        int sessionCount = this.sessions.size();
+        if (sessionCount == 0) {
+            this.lastCameraListSessions = 0;
+            return;
+        }
+        boolean sessionChanged = sessionCount != this.lastCameraListSessions;
+        this.lastCameraListSessions = sessionCount;
+        // A newly connected program must learn the list immediately; otherwise refresh once per
+        // second. Do not suppress an interval refresh when the content is unchanged: a client that
+        // connected in between would never receive its first snapshot.
+        if (!sessionChanged && this.serverTicks % CAMERA_LIST_INTERVAL_TICKS != 0) {
+            return;
+        }
+
+        JsonObject payload = new JsonObject();
+        payload.addProperty("rev", this.serverTicks);
+        payload.addProperty("driver", "client");
+        payload.addProperty("driver_available", false);
+        JsonArray cameras = new JsonArray();
+        for (com.ccvirtualcoms.content.camera.CameraTransmitterBlockEntity camera
+                : com.ccvirtualcoms.content.camera.CameraServerTicker.snapshot()) {
+            if (camera.isRemoved() || camera.getLevel() == null) {
+                continue;
+            }
+            JsonObject entry = new JsonObject();
+            String deviceName = camera.deviceName();
+            String streamUrl = camera.streamUrl();
+            String status = camera.streamingDesired() ? "streaming" : "offline";
+            entry.addProperty("name", deviceName.isBlank() ? "Camera " + camera.getBlockPos().toShortString()
+                    : deviceName);
+            JsonArray pos = new JsonArray();
+            pos.add(camera.getBlockPos().getX());
+            pos.add(camera.getBlockPos().getY());
+            pos.add(camera.getBlockPos().getZ());
+            entry.add("pos", pos);
+            entry.addProperty("device_name", deviceName);
+            entry.addProperty("width", camera.config().resolution().width());
+            entry.addProperty("height", camera.config().resolution().height());
+            entry.addProperty("fps", camera.config().fps());
+            entry.addProperty("status", status);
+            entry.addProperty("stream_url", streamUrl);
+            cameras.add(entry);
+        }
+        payload.add("cameras", cameras);
+        broadcast(Protocol.MSG_CAMERA_LIST, payload.toString());
     }
 
     // ------------------------------------------------------------------ lifecycle

@@ -56,4 +56,9 @@ public final class CameraServerTicker {
     public static synchronized int size() {
         return CAMERAS.size();
     }
+
+    /** A snapshot of every registered camera, safe to iterate off the server thread. */
+    public static synchronized java.util.List<CameraTransmitterBlockEntity> snapshot() {
+        return java.util.List.copyOf(CAMERAS);
+    }
 }

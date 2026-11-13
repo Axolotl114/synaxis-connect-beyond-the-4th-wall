@@ -49,6 +49,15 @@ public final class Protocol {
     /** Either direction: an error occurred, payload carries {@code {"error": "..."}}. */
     public static final int MSG_ERROR = 0x04;
 
+    /**
+     * Game to external, push only: the list of camera transmitters and their output state.
+     *
+     * <p>Additive and backwards compatible: older clients ignore unknown message types, and the
+     * frame format plus {@code VERSION} are untouched. Video frames never travel over this socket;
+     * they are served by the separate loopback MJPEG server.
+     */
+    public static final int MSG_CAMERA_LIST = 0x10;
+
     private Protocol() {
     }
 
@@ -59,6 +68,7 @@ public final class Protocol {
             case MSG_DATA_WRITE -> "DATA_WRITE";
             case MSG_HEARTBEAT -> "HEARTBEAT";
             case MSG_ERROR -> "ERROR";
+            case MSG_CAMERA_LIST -> "CAMERA_LIST";
             default -> "UNKNOWN(0x" + Integer.toHexString(type) + ")";
         };
     }

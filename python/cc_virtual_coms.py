@@ -1126,6 +1126,67 @@ class MjpegStreamParser:
 # --------------------------------------------------------------------------------------
 
 
+class _ChunkedDecoder:
+    """Incremental HTTP/1.1 ``Transfer-Encoding: chunked`` decoder.
+
+    Streaming HTTP servers usually have no Content-Length, so they frame the body as
+    ``<hex size>\\r\\n<chunk data>\\r\\n`` blocks. The multipart parser must see the decoded body;
+    otherwise the chunk size lines corrupt the MJPEG boundary scan.
+    """
+
+    __slots__ = ("_buffer", "_remaining", "_state")
+
+    def __init__(self) -> None:
+        self._buffer = bytearray()
+        self._remaining = 0
+        self._state = "size"  # size | data | trailer | done
+
+    def feed(self, data: bytes) -> bytes:
+        if not data:
+            return b""
+        self._buffer.extend(data)
+        out = bytearray()
+        while True:
+            if self._state == "size":
+                index = self._buffer.find(b"\r\n")
+                if index < 0:
+                    return bytes(out)
+                line = bytes(self._buffer[:index]).split(b";", 1)[0].strip()
+                del self._buffer[:index + 2]
+                if not line:
+                    continue
+                try:
+                    size = int(line, 16)
+                except ValueError:
+                    raise MjpegProtocolError("invalid HTTP chunk size %r" % (line,))
+                if size == 0:
+                    self._state = "done"
+                    return bytes(out)
+                self._remaining = size
+                self._state = "data"
+            elif self._state == "data":
+                take = min(self._remaining, len(self._buffer))
+                if take:
+                    out.extend(self._buffer[:take])
+                    del self._buffer[:take]
+                    self._remaining -= take
+                if self._remaining > 0:
+                    return bytes(out)
+                self._state = "trailer"
+            elif self._state == "trailer":
+                if len(self._buffer) < 2:
+                    return bytes(out)
+                del self._buffer[:2]
+                self._state = "size"
+            else:  # done: ignore anything after the terminating chunk
+                return bytes(out)
+
+    def reset(self) -> None:
+        self._buffer = bytearray()
+        self._remaining = 0
+        self._state = "size"
+
+
 class CameraStream:
     """Consume one camera's MJPEG over HTTP stream (the video side of the camera feature).
 
@@ -1202,6 +1263,8 @@ class CameraStream:
         self._sock: Optional[socket.socket] = None
         self._parser: Optional[MjpegStreamParser] = None
         self._pending: List[bytes] = []
+        self._chunked = False
+        self._chunk_decoder: Optional[_ChunkedDecoder] = None
         self._last_frame: Optional[bytes] = None
         self._last_error: Optional[str] = None
         self._closed = False
@@ -1337,9 +1400,15 @@ class CameraStream:
         )
         self._pending = []
         self._last_error = None
+        self._chunked = headers.get("transfer-encoding", "").strip().lower() == "chunked"
+        self._chunk_decoder = _ChunkedDecoder() if self._chunked else None
         if leftover:
+            body = leftover
+            if self._chunk_decoder is not None:
+                body = self._chunk_decoder.feed(body)
             try:
-                self._pending.extend(self._parser.feed(leftover))
+                if body:
+                    self._pending.extend(self._parser.feed(body))
             except Exception:
                 # A malformed first chunk must not leak the freshly opened socket.
                 self.close()
@@ -1429,6 +1498,17 @@ class CameraStream:
                     raise CameraStreamError("camera stream closed by the server")
                 continue
 
+            if self._chunk_decoder is not None:
+                try:
+                    chunk = self._chunk_decoder.feed(chunk)
+                except MjpegProtocolError as exc:
+                    self._handle_drop(str(exc))
+                    if not self.auto_reconnect:
+                        raise
+                    continue
+                if not chunk:
+                    continue
+
             try:
                 frames = self._parser.feed(chunk)  # type: ignore[union-attr]
             except MjpegProtocolError as exc:
@@ -1449,6 +1529,8 @@ class CameraStream:
                 pass
         self._parser = None
         self._pending = []
+        self._chunked = False
+        self._chunk_decoder = None
 
     def _reconnect(self, deadline: float) -> bool:
         """Try to reopen the stream before ``deadline``; returns whether it succeeded."""
