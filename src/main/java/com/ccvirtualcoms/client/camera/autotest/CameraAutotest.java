@@ -40,12 +40,16 @@ public final class CameraAutotest {
     private static final String ENABLE_PROPERTY = "cc_virtual_coms.autotest";
     private static final int PAGES = 4;
 
+    /** Full-window screenshots taken while streaming, to prove the player view stays stable. */
+    private static final int STABILITY_SHOTS = 8;
+
     private static int ticks;
     private static boolean enabledLogged;
     private static boolean finished;
     private static int phase;
     private static int pageIndex;
     private static int variantIndex;
+    private static int stabilityIndex;
     private static long deadlineTick;
     private static CapturedCamera subject;
     private static CameraConfig originalConfig;
@@ -135,6 +139,28 @@ public final class CameraAutotest {
                         restoreConfiguration(minecraft);
                         phase = 6;
                         deadlineTick = ticks + 40;
+                    }
+                }
+            }
+            case 6 -> {
+                if (ticks >= deadlineTick) {
+                    stabilityIndex = 0;
+                    deadlineTick = ticks;
+                    phase = 7;
+                }
+            }
+            case 7 -> {
+                if (ticks >= deadlineTick) {
+                    String name = "flicker_check_" + stabilityIndex + ".png";
+                    Screenshot.grab(minecraft.gameDirectory, name, minecraft.getMainRenderTarget(),
+                            message -> {
+                            });
+                    stabilityIndex++;
+                    if (stabilityIndex < STABILITY_SHOTS) {
+                        deadlineTick = ticks + 3;
+                    } else {
+                        phase = 8;
+                        deadlineTick = ticks + 20;
                     }
                 }
             }

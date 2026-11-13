@@ -42,6 +42,25 @@
 读写权限不受方向限制。但若某端子正被电路驱动(值列显示 `[synaxis]`),
 写入的值会在下一个游戏刻被电路覆盖。
 
+### 图传摄像头 `camera_transmitter`
+
+把方块视角的游戏画面输出给游戏外的程序(Zoom / Discord / OBS / 浏览器等任何枚举摄像头的应用)。
+
+- **放置与界面**:六向 `facing`,使用原版侦测器模型;空手右键打开配置界面,手持物品时交互交给物品。
+- **视频输出**:分辨率(4:3 / 16:9 预设 + 自定义宽高)、帧率 15–60、彩色 / 黑白、夜视(黑白 + 夜视为热成像风格伪彩色)。
+- **触发**:电路/红石控制开关、保持开启 / 保持关闭、红石模式(保持 / 切换)、阈值 0–15、Create 无线红石双频率槽;完整优先级见界面 tooltip 与 `CameraConfig` / `CameraTransmitterBlockEntity` 的 JavaDoc。
+- **相机**:yaw / pitch / roll 各自可设为「世界稳定」或「跟随 sublevel」;可调局部位置偏移。方块放在 Sable 子维度上时,相机使用 `renderPose` 跟随船体的位移与旋转。
+- **渲染**:光影渲染「开 / 关 / 跟随玩家」。没有生效中的光影包时走离屏渲染,不影响玩家画面;光影包生效时捕获走主渲染目标(每秒最多 10 次,并在同帧重绘玩家视角,避免画面闪烁)。
+- **输出设备**:Windows 上每个摄像头绑定一个 DirectShow 设备 `Synaxis Camera 1..4`(最多 4 路,可在配置中扩展)。首次使用在游戏内运行 `/ccvc_cameras install`,会请求一次 UAC 授权(无需重启系统,外部程序重启后即可在设备列表看到)。驱动未注册/不可用时自动回退到本地 MJPEG,并在界面、日志与 `/api/cameras` 中明确显示 `driver_unavailable`:
+  - 流:`http://127.0.0.1:25586/camera/<位置hex>/stream.mjpeg`
+  - 快照:`http://127.0.0.1:25586/camera/<位置hex>/snapshot.jpg`
+  - 状态:`http://127.0.0.1:25586/api/cameras`(摄像头列表、分辨率、帧率、设备名、状态)
+  端口可用 `-Dcc_virtual_coms.camera.httpPort=<port>` 覆盖;只绑定 `127.0.0.1`。
+- **offline 行为**:未开启、区块未加载或流未启动时,虚拟设备保持存在并持续输出黑底白字 `offline` 帧;方块被破坏时注销对应设备实例。
+- **Synaxis 端子**:`enable`(boolean,输入)、`streaming`(boolean,输出)、`euler_angle_in` / `euler_angle_out`(vec3,`yaw, pitch, roll`;Synaxis 要求端口名唯一,因此拆成一对匹配的输入/输出)。
+- **命令**:`/ccvc_cameras status|install|uninstall|cleanup`、`/ccvc_camera_debug status|pose|dump`。
+- **限制**:DirectShow 设备为 x64 / RGB24,32 位外部程序不可见;光影包生效时的捕获会额外渲染一帧玩家画面(每秒最多 10 次),低配机器可降低分辨率 / 帧率。
+
 ## Python API
 
 文件 `python/cc_virtual_coms.py`,纯标准库,Python 3.8+。
@@ -84,6 +103,27 @@ for port, ptype, value in coms:      # 持续接收推送
 `pack_binary_port_value` / `unpack_binary_port_value`(紧凑二进制编码),
 以及常量 `MAGIC` / `VERSION` / `HEADER_SIZE` / `MSG_*` / `PORT_TYPES`。
 更底层的 `VirtualComsClient` 类提供 `write_port` / `pump` / `listen` / `on_data` 等接口。
+
+### Python 相机 API
+
+```python
+from cc_virtual_coms import CameraStream, Coms
+
+coms = Coms()                                 # 连上 127.0.0.1:25585
+for camera in coms.cameras():                 # 图传摄像头列表(由模组经 TCP 0x10 推送)
+    print(camera["name"], camera["status"], camera["stream_url"])
+print(coms.camera_status("Synaxis Camera 1")) # streaming / offline / driver_unavailable
+
+stream = CameraStream.from_camera(coms.cameras()[0])
+stream.open()
+frame = stream.read_frame()                   # 原始 JPEG bytes,超时返回 None
+if frame:
+    stream.save("camera_frame.jpg")           # 或 save_frames("dir", count=10)
+stream.close()
+```
+
+`CameraStream` 也支持直接给 `stream_url`、`host/port + pos` 或 `name`;`show()` 在安装了
+Pillow + Tk 时显示实时窗口,否则退化为写临时 JPEG 交给系统查看器(标准库主路径是 `save()`)。
 
 ## Lua API
 

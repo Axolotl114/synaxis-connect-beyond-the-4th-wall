@@ -51,6 +51,53 @@ Read and write are not restricted by direction. If a port is currently being
 driven by the circuit (the value column shows `[synaxis]`), a value you write
 is overwritten on the next game tick.
 
+### Camera Transmitter `camera_transmitter`
+
+Streams the block's view to programs outside the game (Zoom, Discord, OBS, or any
+browser that can open a camera).
+
+- **Placement and screen**: six-way `facing`, uses the vanilla observer model;
+  right-click with an empty hand to configure (items keep their own interaction).
+- **Video output**: resolution (4:3 / 16:9 presets plus custom width/height),
+  frame rate 15-60, colour / monochrome, night vision (monochrome + night vision
+  is a thermal-style false-colour look).
+- **Trigger**: circuit/redstone switch, hold on / hold off, redstone mode
+  (hold / toggle), threshold 0-15, two Create wireless redstone frequency slots.
+  The full priority table is in the GUI tooltips and in the
+  `CameraConfig` / `CameraTransmitterBlockEntity` JavaDoc.
+- **Camera**: yaw / pitch / roll can each be "world stable" or "follow
+  sub-level"; the local position offset is configurable. On a Sable sub-level the
+  camera follows the ship's interpolated `renderPose`.
+- **Rendering**: shader rendering "on / off / follow player". Without an active
+  shader pack capture uses a private off-screen target and never touches the
+  player's view; with a shader pack it captures the main render target (at most
+  10 times per second) and re-renders the player view in the same frame so the
+  screen does not flicker.
+- **Output device**: on Windows every camera is bound to a DirectShow video
+  input device `Synaxis Camera 1..4` (four slots). Run `/ccvc_cameras install`
+  in game once; it asks for one UAC confirmation (no system reboot; restart the
+  external application to see the device). If the driver is not registered the
+  MJPEG fallback is used and the state is reported as `driver_unavailable`
+  everywhere (GUI, log, `/api/cameras`):
+  - stream: `http://127.0.0.1:25586/camera/<position-hex>/stream.mjpeg`
+  - snapshot: `http://127.0.0.1:25586/camera/<position-hex>/snapshot.jpg`
+  - status: `http://127.0.0.1:25586/api/cameras`
+  The port can be overridden with `-Dcc_virtual_coms.camera.httpPort=<port>`
+  and is only bound to `127.0.0.1`.
+- **Offline behaviour**: when the stream is off, the chunk is unloaded or the
+  trigger is inactive, the device stays present and keeps emitting a black
+  "offline" frame; breaking the block unregisters its device instance.
+- **Synaxis terminals**: `enable` (boolean in), `streaming` (boolean out),
+  `euler_angle_in` / `euler_angle_out` (vec3 `yaw, pitch, roll`; Synaxis requires
+  unique port names, so the bidirectional terminal is a matched input/output
+  pair).
+- **Commands**: `/ccvc_cameras status|install|uninstall|cleanup`,
+  `/ccvc_camera_debug status|pose|dump`.
+- **Limitations**: the DirectShow device is x64 / RGB24 only (32-bit external
+  applications cannot see it); shader capture renders the player view a second
+  time (at most 10 times per second), so lower the resolution/frame rate on slow
+  machines.
+
 ## Python API
 
 File `python/cc_virtual_coms.py`. Standard library only, Python 3.8+.
@@ -99,6 +146,29 @@ Lower-level helpers, if you want to drive a socket yourself: `pack_message`,
 (compact binary encoding), plus the constants `MAGIC`, `VERSION`,
 `HEADER_SIZE`, `MSG_*`, `PORT_TYPES`. The underlying `VirtualComsClient` class
 exposes `write_port`, `pump`, `listen`, `on_data` and friends.
+
+### Python camera API
+
+```python
+from cc_virtual_coms import CameraStream, Coms
+
+coms = Coms()                                  # connects to 127.0.0.1:25585
+for camera in coms.cameras():                  # pushed by the mod over TCP 0x10
+    print(camera["name"], camera["status"], camera["stream_url"])
+print(coms.camera_status("Synaxis Camera 1"))  # streaming / offline / driver_unavailable
+
+stream = CameraStream.from_camera(coms.cameras()[0])
+stream.open()
+frame = stream.read_frame()                    # raw JPEG bytes, None on timeout
+if frame:
+    stream.save("camera_frame.jpg")            # or save_frames("dir", count=10)
+stream.close()
+```
+
+`CameraStream` also accepts a direct `stream_url`, or `host`/`port` plus a
+`pos`/`name`. `show()` opens a live window when Pillow + Tk are installed and
+otherwise falls back to handing a temporary JPEG to the system viewer; the
+zero-dependency path is `save()`.
 
 ## Lua API
 
