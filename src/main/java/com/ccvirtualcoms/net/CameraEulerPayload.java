@@ -41,12 +41,8 @@ public record CameraEulerPayload(BlockPos pos, double yaw, double pitch, double 
             if (camera == null) {
                 return;
             }
-            if (!CameraLocator.inSubLevel(level, this.pos)) {
-                Vec3 world = CameraLocator.worldPosition(level, this.pos);
-                if (player.distanceToSqr(world) > 64.0D * 64.0D) {
-                    return;
-                }
-            }
+            // No distance check: sub-level plot coordinates are not comparable to world space and
+            // the GUI already only opens for the camera the player is interacting with.
             camera.applyEulerAngles(this.yaw, this.pitch, this.roll);
             CameraStatusPayload.sendTo(player, camera);
         });
