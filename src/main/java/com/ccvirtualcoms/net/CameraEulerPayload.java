@@ -41,9 +41,11 @@ public record CameraEulerPayload(BlockPos pos, double yaw, double pitch, double 
             if (camera == null) {
                 return;
             }
-            Vec3 world = CameraLocator.worldPosition(level, this.pos);
-            if (player.distanceToSqr(world) > 64.0D * 64.0D) {
-                return;
+            if (!CameraLocator.inSubLevel(level, this.pos)) {
+                Vec3 world = CameraLocator.worldPosition(level, this.pos);
+                if (player.distanceToSqr(world) > 64.0D * 64.0D) {
+                    return;
+                }
             }
             camera.applyEulerAngles(this.yaw, this.pitch, this.roll);
             CameraStatusPayload.sendTo(player, camera);

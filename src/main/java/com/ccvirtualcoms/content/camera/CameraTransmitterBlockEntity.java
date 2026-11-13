@@ -271,6 +271,11 @@ public class CameraTransmitterBlockEntity extends BlockEntity
         return ComponentSchema.of(
                 List.of(
                         PortDef.input("enable", SignalType.BOOLEAN),
+                        PortDef.input("real_fov", SignalType.REAL),
+                        PortDef.input("fov_in", SignalType.REAL),
+                        PortDef.input("yaw_stabilizing", SignalType.BOOLEAN),
+                        PortDef.input("pitch_stabilizing", SignalType.BOOLEAN),
+                        PortDef.input("roll_stabilizing", SignalType.BOOLEAN),
                         PortDef.input("euler_angle_in", SignalType.VEC3)),
                 List.of(
                         PortDef.output("streaming", SignalType.BOOLEAN),
@@ -308,7 +313,7 @@ public class CameraTransmitterBlockEntity extends BlockEntity
                     this.enableInput = bool.value();
                 }
             }
-            case "real_fov" -> {
+            case "real_fov", "fov_in" -> {
                 if (value instanceof SignalValue.Real real) {
                     int fov = (int) Math.round(real.value());
                     CameraConfig next = this.config.withFov(fov);
