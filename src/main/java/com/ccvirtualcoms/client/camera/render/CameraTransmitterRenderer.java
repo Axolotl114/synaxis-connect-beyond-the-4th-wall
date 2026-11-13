@@ -52,6 +52,14 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
     public void render(CameraTransmitterBlockEntity camera, float partialTick, PoseStack pose,
                        MultiBufferSource buffers, int packedLight, int packedOverlay) {
         Minecraft minecraft = Minecraft.getInstance();
+        int packedLight = net.minecraft.client.renderer.LightTexture.pack(
+                minecraft.level == null ? 0 : minecraft.level.getBrightness(
+                        net.minecraft.world.level.LightLayer.BLOCK, camera.getBlockPos()),
+                minecraft.level == null ? 15 : Math.max(
+                        minecraft.level.getBrightness(net.minecraft.world.level.LightLayer.SKY,
+                                camera.getBlockPos()),
+                        minecraft.level.getBrightness(net.minecraft.world.level.LightLayer.SKY,
+                                camera.getBlockPos().above())));
         if (minecraft.level == null) {
             return;
         }
@@ -78,7 +86,7 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
         draw("status_led", pose, buffers, state, packedLight, packedOverlay);
         if (camera.clientStatus() == CameraStreamStatus.STREAMING
                 && Math.floorMod(minecraft.level.getGameTime(), 20L) < 10L) {
-            draw("status_led_on", pose, buffers, state, FULL_BRIGHT, packedOverlay);
+            draw("status_led_on", pose, buffers, state, packedLight, packedOverlay);
         }
 
         pose.pushPose();
@@ -121,11 +129,11 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
         VertexConsumer consumer = buffers.getBuffer(RenderType.cutout());
         RandomSource random = RandomSource.create(42L);
         for (BakedQuad quad : model.getQuads(state, null, random)) {
-            consumer.putBulkData(pose.last(), quad, 1.0F, 1.0F, 1.0F, 1.0F, FULL_BRIGHT, packedOverlay);
+            consumer.putBulkData(pose.last(), quad, 1.0F, 1.0F, 1.0F, 1.0F, packedLight, packedOverlay);
         }
         for (Direction direction : Direction.values()) {
             for (BakedQuad quad : model.getQuads(state, direction, random)) {
-                consumer.putBulkData(pose.last(), quad, 1.0F, 1.0F, 1.0F, 1.0F, FULL_BRIGHT, packedOverlay);
+                consumer.putBulkData(pose.last(), quad, 1.0F, 1.0F, 1.0F, 1.0F, packedLight, packedOverlay);
             }
         }
     }
