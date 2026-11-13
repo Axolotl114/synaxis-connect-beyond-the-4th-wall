@@ -91,6 +91,17 @@ public final class CameraCaptureRuntime {
     }
 
     /**
+     * Called once per rendered frame <b>before</b> the player's frame is drawn. The camera view is
+     * rendered into a private target here, so a capture can never appear on the player's screen.
+     */
+    public void captureFrame(float partialTick) {
+        if (Float.isFinite(partialTick) && partialTick >= 0.0F && partialTick <= 1.0F) {
+            this.partialTick = partialTick;
+        }
+        CameraCapturePipeline.get().captureFrame();
+    }
+
+    /**
      * Called once per rendered frame with the frame's partial tick.
      *
      * <p>The render-thread capture work itself is triggered by the {@code GameRenderer} mixin

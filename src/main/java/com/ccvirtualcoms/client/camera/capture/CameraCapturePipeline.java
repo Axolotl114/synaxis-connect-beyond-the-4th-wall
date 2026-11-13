@@ -66,13 +66,6 @@ public final class CameraCapturePipeline {
 
     private final Map<Long, Session> sessions = new LinkedHashMap<>();
     private final OffscreenViewRenderer offscreen = new OffscreenViewRenderer();
-    private final PresentGuard presentGuard = new PresentGuard();
-    private boolean mainTargetCapturedThisFrame;
-
-    @Nullable
-    private CaptureRequest pending;
-    @Nullable
-    private CameraOverride override;
 
     private long budgetWindowStartNanos;
     private long budgetPixelsUsed;
@@ -101,10 +94,6 @@ public final class CameraCapturePipeline {
         OFFSCREEN,
         MAIN_TARGET,
         PLACEHOLDER
-    }
-
-    /** A camera transform applied to the real camera for exactly one frame. */
-    public record CameraOverride(Vec3 position, float yaw, float pitch) {
     }
 
     /** One capture picked for the current frame. */
@@ -183,9 +172,7 @@ public final class CameraCapturePipeline {
      * Picks the capture for this frame. Must run before the camera is set up, so a main-target
      * capture can override the camera for the whole frame.
      */
-    public void onFrameBegin() {
-        this.pending = null;
-        this.override = null;
+    public void captureFrame() {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.level == null) {
             return;
@@ -232,14 +219,15 @@ public final class CameraCapturePipeline {
             }
             return;
         }
-        this.pending = new CaptureRequest(best, bestSession, bestSession.path, now);
-        if (bestSession.path == CapturePath.MAIN_TARGET) {
-            CameraPoseResolver.ResolvedPose pose = best.resolvedPose();
-            if (pose != null) {
-                this.override = new CameraOverride(
-                        new Vec3(pose.pose().x(), pose.pose().y(), pose.pose().z()),
-                        pose.pose().yaw(), pose.pose().pitch());
-            }
+        boolean issued = this.captureOffscreen(minecraft, best, bestSession,
+                resolution.width(), resolution.height());
+        if (issued) {
+            bestSession.lastCaptureNanos = now;
+            bestSession.pendingCaptureNanos = now;
+            this.lastCaptureNanos = now;
+        } else {
+            bestSession.droppedFrames++;
+            this.drops++;
         }
     }
 
@@ -252,74 +240,8 @@ public final class CameraCapturePipeline {
      *         the player's view before the frame is presented (otherwise the player would briefly
      *         see the camera view - the "flicker" this path is known for)
      */
-    public boolean onAfterLevelRender() {
-        CaptureRequest request = this.pending;
-        this.pending = null;
-        this.override = null;
-        if (request == null) {
-            return false;
-        }
-        Minecraft minecraft = Minecraft.getInstance();
-        Session session = request.session();
-        CapturedCamera camera = request.camera();
-        CameraConfig config = camera.config();
-        int width = config.resolution().width();
-        int height = config.resolution().height();
-        boolean mainTargetCaptured = false;
-        try {
-            boolean isMainTarget = request.path() == CapturePath.MAIN_TARGET;
-            if (isMainTarget) {
-                long now = System.nanoTime();
-                // Main-target capture re-renders the player view afterwards, so keep it well below
-                // the display rate: at most ten captures per second.
-                if (now - session.lastMainTargetCaptureNanos < MAIN_TARGET_MIN_INTERVAL_NANOS) {
-                    session.droppedFrames++;
-                    this.drops++;
-                    session.detail = "main-target capture throttled to keep the player view stable";
-                    return false;
-                }
-                session.lastMainTargetCaptureNanos = now;
-            }
-            boolean issued;
-            if (isMainTarget) {
-                issued = this.captureMainTarget(minecraft, session, width, height);
-            } else {
-                issued = this.captureOffscreen(minecraft, camera, session, width, height);
-            }
-            if (issued) {
-                session.lastCaptureNanos = request.requestedNanos();
-                session.pendingCaptureNanos = request.requestedNanos();
-                this.lastCaptureNanos = request.requestedNanos();
-                mainTargetCaptured = isMainTarget;
-                if (mainTargetCaptured) {
-                    this.mainTargetCapturedThisFrame = true;
-                }
-            } else {
-                session.droppedFrames++;
-                this.drops++;
-            }
-        } catch (RuntimeException failure) {
-            session.failedFrames++;
-            this.failures++;
-            session.detail = "capture failed: " + failure;
-            CCVirtualComs.LOGGER.warn("[camera] Capture failed for {}: {}", camera.pos(),
-                    failure.toString());
-        } finally {
-            // The main target must be the draw target again for the hand and GUI passes.
-            minecraft.getMainRenderTarget().bindWrite(false);
-        }
-        return mainTargetCaptured;
-    }
-
     /** Polls finished readbacks and publishes them to the cameras. */
     public void onFrameEnd() {
-        // Runs after the GUI, immediately before the buffer swap. If this frame captured the main
-        // target (camera view), put the previous player frame back so the screen never flashes.
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft != null) {
-            this.presentGuard.afterFrame(minecraft, this.mainTargetCapturedThisFrame);
-        }
-        this.mainTargetCapturedThisFrame = false;
         for (Session session : this.sessions.values()) {
             if (session.reader == null) {
                 continue;
@@ -346,22 +268,13 @@ public final class CameraCapturePipeline {
         }
     }
 
-    /** Camera override for the current frame, or {@code null}; polled by the Camera mixin. */
-    public @Nullable CameraOverride cameraOverride() {
-        return this.override;
-    }
-
     /** Releases every GPU resource; call when leaving a level. */
     public void reset() {
-        this.pending = null;
-        this.override = null;
         for (Session session : this.sessions.values()) {
             session.close();
         }
         this.sessions.clear();
         this.offscreen.close();
-        this.presentGuard.reset();
-        this.mainTargetCapturedThisFrame = false;
         this.budgetPixelsUsed = 0L;
         this.budgetWindowStartNanos = 0L;
     }
@@ -407,27 +320,6 @@ public final class CameraCapturePipeline {
     }
 
     // ------------------------------------------------------------------ internals
-
-    private boolean captureMainTarget(Minecraft minecraft, Session session, int width, int height) {
-        if (IrisCompat.isRenderingShadowPass()) {
-            session.detail = "skipped: Iris shadow pass is active";
-            return false;
-        }
-        RenderTarget main = minecraft.getMainRenderTarget();
-        if (main == null) {
-            session.detail = "skipped: no main render target";
-            return false;
-        }
-        ReadbackTarget target = session.readbackTarget(width, height);
-        if (target == null || !target.blitFrom(main)) {
-            session.detail = "skipped: blit to readback target failed";
-            return false;
-        }
-        PboFrameReader reader = session.reader(width, height);
-        session.path = CapturePath.MAIN_TARGET;
-        session.detail = "main-target capture (Iris compatible)";
-        return reader.requestFramebufferRead(target.frameBufferId());
-    }
 
     private boolean captureOffscreen(Minecraft minecraft, CapturedCamera camera, Session session,
                                      int width, int height) {
@@ -475,17 +367,9 @@ public final class CameraCapturePipeline {
         } else if (mode == CameraRenderMode.ON) {
             degradation = "Iris is not installed, so shaders cannot be used; off-screen capture";
         }
-        if (path == CapturePath.MAIN_TARGET && !this.mainTargetSupported()) {
+        if (!this.offscreenSupported()) {
             path = CapturePath.PLACEHOLDER;
-            degradation = "main-target capture unavailable: camera mixin not loaded";
-        } else if (path == CapturePath.OFFSCREEN && !this.offscreenSupported()) {
-            path = CapturePath.PLACEHOLDER;
-            degradation = "off-screen capture unavailable: camera mixin not loaded";
-        } else if (path == CapturePath.MAIN_TARGET && camera.resolvedPose() != null
-                && camera.resolvedPose().hasRoll()) {
-            // Minecraft's Camera cannot express roll; the main-target path cannot keep the roll.
-            degradation = "roll is not representable on the vanilla camera; main-target capture "
-                    + "drops it (use the off-screen path for a rolled view)";
+            degradation = "off-screen capture unavailable: camera transform mixin not loaded";
         }
         session.path = path;
         String detail = degradation == null ? path.name().toLowerCase(java.util.Locale.ROOT)

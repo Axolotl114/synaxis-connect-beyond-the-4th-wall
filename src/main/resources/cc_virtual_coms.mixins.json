@@ -4,8 +4,7 @@
   "package": "com.ccvirtualcoms.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "client.CameraCaptureMixin",
-    "client.GameRendererCaptureMixin"
+    "client.CameraCaptureMixin"
   ],
   "injectors": {
     "defaultRequire": 1
