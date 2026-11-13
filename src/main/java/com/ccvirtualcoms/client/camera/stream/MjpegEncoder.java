@@ -243,10 +243,16 @@ public final class MjpegEncoder {
                         destination[destinationIndex++] = (byte) red;
                     }
                 } else if (nightVision) {
-                    int thermalIndex = thermalLuma(luma);
-                    destination[destinationIndex++] = (byte) THERMAL_B[thermalIndex];
-                    destination[destinationIndex++] = (byte) THERMAL_G[thermalIndex];
-                    destination[destinationIndex++] = (byte) THERMAL_R[thermalIndex];
+                    // White-hot thermal look: hot objects go to white instead of the old red
+                    // iron-bow palette, and the gain/gamma lifts dark entities and sub-levels.
+                    int hot = thermalLuma(luma);
+                    int white = Math.max(0, Math.min(255, (int) Math.round(hot * 1.35D + 22.0D)));
+                    int r = Math.min(255, white + 6);
+                    int g = white;
+                    int b = Math.max(0, white - 8);
+                    destination[destinationIndex++] = (byte) b;
+                    destination[destinationIndex++] = (byte) g;
+                    destination[destinationIndex++] = (byte) r;
                 } else {
                     destination[destinationIndex++] = (byte) luma;
                 }

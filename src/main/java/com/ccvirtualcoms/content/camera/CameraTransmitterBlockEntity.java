@@ -303,6 +303,21 @@ public class CameraTransmitterBlockEntity extends BlockEntity
                     this.enableInput = bool.value();
                 }
             }
+            case "real_fov" -> {
+                if (value instanceof SignalValue.Real real) {
+                    int fov = (int) Math.round(real.value());
+                    CameraConfig next = this.config.withFov(fov);
+                    if (!next.equals(this.config)) {
+                        this.config = next;
+                        this.revision++;
+                        this.setChanged();
+                        this.broadcastStatus();
+                    }
+                }
+            }
+            case "yaw_stabilizing" -> this.applyStabilizing(0, value);
+            case "pitch_stabilizing" -> this.applyStabilizing(1, value);
+            case "roll_stabilizing" -> this.applyStabilizing(2, value);
             case "euler_angle", "euler_angle_in" -> {
                 if (value instanceof SignalValue.Vec3 vec) {
                     if (Double.isFinite(vec.x()) && Double.isFinite(vec.y()) && Double.isFinite(vec.z())) {
@@ -315,6 +330,25 @@ public class CameraTransmitterBlockEntity extends BlockEntity
             default -> {
                 // Output terminals cannot be written by the graph.
             }
+        }
+    }
+
+    /** true = world stable, false = follow the Sable sub-level. */
+    private void applyStabilizing(int axis, SignalValue value) {
+        if (!(value instanceof SignalValue.Bool bool)) {
+            return;
+        }
+        CameraAxisMode mode = bool.value() ? CameraAxisMode.WORLD_STABLE : CameraAxisMode.FOLLOW_SUBLEVEL;
+        CameraConfig next = switch (axis) {
+            case 0 -> this.config.withAxisModes(mode, this.config.pitchMode(), this.config.rollMode());
+            case 1 -> this.config.withAxisModes(this.config.yawMode(), mode, this.config.rollMode());
+            default -> this.config.withAxisModes(this.config.yawMode(), this.config.pitchMode(), mode);
+        };
+        if (!next.equals(this.config)) {
+            this.config = next;
+            this.revision++;
+            this.setChanged();
+            this.broadcastStatus();
         }
     }
 
