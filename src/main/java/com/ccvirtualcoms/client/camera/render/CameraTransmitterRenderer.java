@@ -71,7 +71,7 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
         applyFacing(pose, facing);
 
         double yaw = camera.eulerAngles()[0];
-        double pitch = Math.max(-60.0D, Math.min(60.0D, camera.eulerAngles()[1]));
+        double pitch = camera.eulerAngles()[1];
         double roll = camera.eulerAngles()[2];
         if (camera.config() != null) {
             dev.ryanhcode.sable.companion.SubLevelAccess subLevel =
@@ -99,7 +99,7 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
                 float[] display = com.ccvirtualcoms.client.camera.capture.CameraTransformMath
                         .eulerFromRotation(modelRotation, new float[3]);
                 yaw = display[0];
-                pitch = Math.max(-60.0D, Math.min(60.0D, display[1]));
+                pitch = display[1];
                 roll = display[2];
             }
         }

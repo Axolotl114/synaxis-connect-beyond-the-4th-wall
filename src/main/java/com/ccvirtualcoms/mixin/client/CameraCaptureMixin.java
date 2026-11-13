@@ -26,6 +26,9 @@ public abstract class CameraCaptureMixin implements CaptureCameraAccess {
     @Shadow
     protected abstract void setRotation(float yaw, float pitch);
 
+    @Shadow
+    protected abstract void setRotation(float yaw, float pitch, float roll);
+
     @Override
     public void ccvc$setPosition(Vec3 position) {
         this.setPosition(position);
@@ -36,6 +39,11 @@ public abstract class CameraCaptureMixin implements CaptureCameraAccess {
         this.setRotation(yaw, pitch);
     }
 
+    @Override
+    public void ccvc$setRotation(float yaw, float pitch, float roll) {
+        this.setRotation(yaw, pitch, roll);
+    }
+
     @Inject(method = "setup", at = @At("TAIL"))
     private void ccvc$applyCaptureOverride(BlockGetter level, Entity entity, boolean detached,
                                            boolean thirdPersonReverse, float partialTick,
@@ -43,7 +51,7 @@ public abstract class CameraCaptureMixin implements CaptureCameraAccess {
         CameraCapturePipeline.CameraOverride override = CameraCapturePipeline.get().cameraOverride();
         if (override != null) {
             this.setPosition(override.position());
-            this.setRotation(override.yaw(), override.pitch());
+            this.setRotation(override.yaw(), override.pitch(), override.roll());
         }
     }
 }

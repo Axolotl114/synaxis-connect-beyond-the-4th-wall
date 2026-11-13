@@ -17,4 +17,6 @@ public interface CaptureCameraAccess {
 
     /** Sets the camera rotation in Minecraft degrees: yaw around Y, pitch positive downward. */
     void ccvc$setRotation(float yaw, float pitch);
+
+    void ccvc$setRotation(float yaw, float pitch, float roll);
 }

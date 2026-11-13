@@ -125,7 +125,7 @@ public final class CameraCapturePipeline {
     }
 
     /** A camera transform applied to the real camera for exactly one frame. */
-    public record CameraOverride(Vec3 position, float yaw, float pitch) {
+    public record CameraOverride(Vec3 position, float yaw, float pitch, float roll) {
     }
 
     /** One capture picked for the current frame. */
@@ -277,7 +277,7 @@ public final class CameraCapturePipeline {
         }
         this.override = new CameraOverride(
                 new Vec3(resolved.pose().x(), resolved.pose().y(), resolved.pose().z()),
-                resolved.pose().yaw(), resolved.pose().pitch());
+                resolved.pose().yaw(), resolved.pose().pitch(), resolved.pose().roll());
         this.pending = new PendingCapture(best, bestSession, resolution.width(),
                 resolution.height(), now);
         this.savedRenderHand = false;
