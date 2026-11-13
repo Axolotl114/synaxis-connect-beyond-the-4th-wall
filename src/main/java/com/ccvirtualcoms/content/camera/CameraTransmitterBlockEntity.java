@@ -80,6 +80,9 @@ public class CameraTransmitterBlockEntity extends BlockEntity
 
     private static final String CONFIG_TAG = "Camera";
     private static final String EULER_TAG = "Euler";
+    private static final String EULER_VERSION_TAG = "EulerVersion";
+    private static final int EULER_VERSION = 2;
+
     private static final String REVISION_TAG = "Revision";
     private static final String ENDPOINT_ID_TAG = "EndpointId";
     private static final String STATUS_DETAIL_TAG = "StatusDetail";
@@ -575,6 +578,11 @@ public class CameraTransmitterBlockEntity extends BlockEntity
             this.eulerPitch = euler.getDouble("Pitch");
             this.eulerRoll = euler.getDouble("Roll");
         } else {
+            this.syncEulerFromFacing(this.getBlockState());
+        }
+        if (!tag.contains(EULER_VERSION_TAG)) {
+            // Older saves kept the default Euler angles even after the facing changed, which made
+            // the view 90/180 degrees off. Re-derive once from the block state and persist v2.
             this.syncEulerFromFacing(this.getBlockState());
         }
         this.revision = tag.getInt(REVISION_TAG);
