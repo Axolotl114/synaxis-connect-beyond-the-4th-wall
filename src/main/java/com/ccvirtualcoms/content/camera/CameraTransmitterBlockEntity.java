@@ -1,5 +1,6 @@
 package com.ccvirtualcoms.content.camera;
 
+import com.ccvirtualcoms.camera.CameraAxisMode;
 import com.ccvirtualcoms.camera.CameraConfig;
 import com.ccvirtualcoms.camera.CameraStreamStatus;
 import com.ccvirtualcoms.net.CameraStatusPayload;
