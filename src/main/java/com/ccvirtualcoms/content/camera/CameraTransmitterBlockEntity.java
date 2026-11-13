@@ -235,6 +235,9 @@ public class CameraTransmitterBlockEntity extends BlockEntity
     public void applyStatusSnapshot(CameraConfig snapshotConfig, CameraStreamStatus status,
                                     String deviceName, String streamUrl, int signal, int newRevision,
                                     String detail) {
+        if (newRevision < this.revision) {
+            return; // stale snapshot must not roll the configuration back
+        }
         if (snapshotConfig != null) {
             this.config = snapshotConfig;
         }

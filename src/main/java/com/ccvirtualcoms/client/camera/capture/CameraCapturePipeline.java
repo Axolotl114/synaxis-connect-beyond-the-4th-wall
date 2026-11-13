@@ -79,6 +79,7 @@ public final class CameraCapturePipeline {
     @Nullable
     private PendingCapture pending;
     private boolean capturing;
+    private boolean savedRenderHand;
     private int captureFov;
     private int loggedCaptureFov = -1;
     private boolean savedBobView;
@@ -266,6 +267,11 @@ public final class CameraCapturePipeline {
                 resolved.pose().yaw(), resolved.pose().pitch());
         this.pending = new PendingCapture(best, bestSession, resolution.width(),
                 resolution.height(), now);
+        this.savedRenderHand = false;
+        if (minecraft.gameRenderer instanceof com.ccvirtualcoms.mixin.client.GameRendererAccess access) {
+            this.savedRenderHand = access.ccvc$isRenderHand();
+            access.ccvc$setRenderHand(false);
+        }
         this.captureFov = config.fov();
         if (this.captureFov != this.loggedCaptureFov) {
             this.loggedCaptureFov = this.captureFov;
@@ -306,6 +312,9 @@ public final class CameraCapturePipeline {
             this.override = null;
             this.pending = null;
             this.captureFov = 0;
+            if (minecraft.gameRenderer instanceof com.ccvirtualcoms.mixin.client.GameRendererAccess access) {
+                access.ccvc$setRenderHand(this.savedRenderHand);
+            }
             this.restorePlayerCameraFeedback(minecraft);
             // Hold the previous complete player frame on screen (frame hold, not a flash).
             this.frameBackup.restore(minecraft);
