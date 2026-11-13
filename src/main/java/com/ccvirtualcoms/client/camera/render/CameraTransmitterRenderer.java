@@ -120,7 +120,7 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
         }
 
         pose.pushPose();
-        pivotRotate(pose, Axis.ZP, (float) -roll, 8.0D, CAMERA_PIVOT, 8.0D);
+        pivotRotate(pose, Axis.ZP, (float) roll, 8.0D, CAMERA_PIVOT, 8.0D);
         draw("roll", pose, buffers, state, light, packedOverlay);
         pose.popPose();
 
