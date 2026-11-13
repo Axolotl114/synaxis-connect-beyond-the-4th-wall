@@ -532,6 +532,11 @@ public class CameraTransmitterScreen extends Screen {
         this.markChanged(this.config.withFov(fov));
         com.ccvirtualcoms.CCVirtualComs.LOGGER.info("[camera-gui] fov changed: text={} parsed={} config.fov={}",
                 value, fov, this.config.fov());
+        // Send immediately: the debounced tick flush used to miss FOV-only edits, so the value
+        // only took effect when another field changed and re-sent the whole config.
+        this.dirty = false;
+        net.neoforged.neoforge.network.PacketDistributor.sendToServer(
+                new com.ccvirtualcoms.net.CameraConfigPayload(this.pos, this.config));
         // FOV is a single value the user expects to see applied immediately; bypass the debounce.
         this.flush();
     }
