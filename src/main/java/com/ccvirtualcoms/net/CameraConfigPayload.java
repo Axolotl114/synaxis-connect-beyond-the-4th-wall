@@ -112,6 +112,7 @@ public record CameraConfigPayload(BlockPos pos, CameraConfig config) implements 
             buffer.writeDouble(config.offsetY());
             buffer.writeDouble(config.offsetZ());
             buffer.writeVarInt(config.renderMode().ordinal());
+            buffer.writeVarInt(config.fov());
         }
 
         static CameraConfig decodeConfig(RegistryFriendlyByteBuf buffer) {
@@ -135,6 +136,7 @@ public record CameraConfigPayload(BlockPos pos, CameraConfig config) implements 
             double offsetZ = buffer.readDouble();
             CameraRenderMode renderMode = ordinal(CameraRenderMode.values(), buffer.readVarInt(),
                     CameraRenderMode.FOLLOW_PLAYER);
+            int fov = buffer.readVarInt();
             return new CameraConfig(
                     new CameraResolution(width, height),
                     fps,
@@ -152,7 +154,8 @@ public record CameraConfigPayload(BlockPos pos, CameraConfig config) implements 
                     offsetX,
                     offsetY,
                     offsetZ,
-                    renderMode);
+                    renderMode,
+                    fov);
         }
 
         static CameraStreamStatus statusByName(String name) {

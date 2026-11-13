@@ -64,10 +64,16 @@ public record CameraConfig(
         double offsetX,
         double offsetY,
         double offsetZ,
-        CameraRenderMode renderMode) {
+        CameraRenderMode renderMode,
+        int fov) {
 
     /** Maximum local position offset on any axis, in blocks. */
     public static final double MAX_OFFSET = 16.0D;
+
+    /** Vertical field of view limits for the camera, in degrees. */
+    public static final int MIN_FOV = 30;
+    public static final int MAX_FOV = 120;
+    public static final int DEFAULT_FOV = 70;
 
     /** The configuration a freshly placed camera starts with. */
     public static final CameraConfig DEFAULT = new CameraConfig(
@@ -87,7 +93,8 @@ public record CameraConfig(
             0.0D,
             0.0D,
             0.0D,
-            CameraRenderMode.FOLLOW_PLAYER);
+            CameraRenderMode.FOLLOW_PLAYER,
+            DEFAULT_FOV);
 
     public CameraConfig {
         resolution = resolution == null ? CameraResolution.DEFAULT : resolution;
@@ -103,6 +110,7 @@ public record CameraConfig(
         offsetY = clampOffset(offsetY);
         offsetZ = clampOffset(offsetZ);
         renderMode = renderMode == null ? CameraRenderMode.FOLLOW_PLAYER : renderMode;
+        fov = clampFov(fov);
     }
 
     /** {@code true} when either wireless redstone frequency slot is filled. */
@@ -148,7 +156,8 @@ public record CameraConfig(
                 clampOffset(this.offsetX),
                 clampOffset(this.offsetY),
                 clampOffset(this.offsetZ),
-                this.renderMode);
+                this.renderMode,
+                clampFov(this.fov));
     }
 
     // ------------------------------------------------------------------ copy helpers
@@ -157,84 +166,91 @@ public record CameraConfig(
         return new CameraConfig(value, this.fps, this.color, this.nightVision, this.redstoneControl,
                 this.holdOn, this.redstoneMode, this.redstoneThreshold, this.frequencyA, this.frequencyB,
                 this.yawMode, this.pitchMode, this.rollMode, this.offsetX, this.offsetY, this.offsetZ,
-                this.renderMode);
+                this.renderMode, this.fov);
     }
 
     public CameraConfig withFps(int value) {
         return new CameraConfig(this.resolution, clampFps(value), this.color, this.nightVision,
                 this.redstoneControl, this.holdOn, this.redstoneMode, this.redstoneThreshold, this.frequencyA,
                 this.frequencyB, this.yawMode, this.pitchMode, this.rollMode, this.offsetX, this.offsetY,
-                this.offsetZ, this.renderMode);
+                this.offsetZ, this.renderMode, this.fov);
+    }
+
+    public CameraConfig withFov(int value) {
+        return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision,
+                this.redstoneControl, this.holdOn, this.redstoneMode, this.redstoneThreshold,
+                this.frequencyA, this.frequencyB, this.yawMode, this.pitchMode, this.rollMode,
+                this.offsetX, this.offsetY, this.offsetZ, this.renderMode, clampFov(value));
     }
 
     public CameraConfig withColor(boolean value) {
         return new CameraConfig(this.resolution, this.fps, value, this.nightVision, this.redstoneControl,
                 this.holdOn, this.redstoneMode, this.redstoneThreshold, this.frequencyA, this.frequencyB,
                 this.yawMode, this.pitchMode, this.rollMode, this.offsetX, this.offsetY, this.offsetZ,
-                this.renderMode);
+                this.renderMode, this.fov);
     }
 
     public CameraConfig withNightVision(boolean value) {
         return new CameraConfig(this.resolution, this.fps, this.color, value, this.redstoneControl,
                 this.holdOn, this.redstoneMode, this.redstoneThreshold, this.frequencyA, this.frequencyB,
                 this.yawMode, this.pitchMode, this.rollMode, this.offsetX, this.offsetY, this.offsetZ,
-                this.renderMode);
+                this.renderMode, this.fov);
     }
 
     public CameraConfig withRedstoneControl(boolean value) {
         return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision, value,
                 this.holdOn, this.redstoneMode, this.redstoneThreshold, this.frequencyA, this.frequencyB,
                 this.yawMode, this.pitchMode, this.rollMode, this.offsetX, this.offsetY, this.offsetZ,
-                this.renderMode);
+                this.renderMode, this.fov);
     }
 
     public CameraConfig withHoldOn(boolean value) {
         return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision,
                 this.redstoneControl, value, this.redstoneMode, this.redstoneThreshold, this.frequencyA,
                 this.frequencyB, this.yawMode, this.pitchMode, this.rollMode, this.offsetX, this.offsetY,
-                this.offsetZ, this.renderMode);
+                this.offsetZ, this.renderMode, this.fov);
     }
 
     public CameraConfig withRedstoneMode(CameraRedstoneMode value) {
         return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision,
                 this.redstoneControl, this.holdOn, value, this.redstoneThreshold, this.frequencyA,
                 this.frequencyB, this.yawMode, this.pitchMode, this.rollMode, this.offsetX, this.offsetY,
-                this.offsetZ, this.renderMode);
+                this.offsetZ, this.renderMode, this.fov);
     }
 
     public CameraConfig withRedstoneThreshold(int value) {
         return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision,
                 this.redstoneControl, this.holdOn, this.redstoneMode, value, this.frequencyA,
                 this.frequencyB, this.yawMode, this.pitchMode, this.rollMode, this.offsetX, this.offsetY,
-                this.offsetZ, this.renderMode);
+                this.offsetZ, this.renderMode, this.fov);
     }
 
     public CameraConfig withFrequencies(ItemStack a, ItemStack b) {
         return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision,
                 this.redstoneControl, this.holdOn, this.redstoneMode, this.redstoneThreshold, a, b,
                 this.yawMode, this.pitchMode, this.rollMode, this.offsetX, this.offsetY, this.offsetZ,
-                this.renderMode);
+                this.renderMode, this.fov);
     }
 
     public CameraConfig withAxisModes(CameraAxisMode yaw, CameraAxisMode pitch, CameraAxisMode roll) {
         return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision,
                 this.redstoneControl, this.holdOn, this.redstoneMode, this.redstoneThreshold,
                 this.frequencyA, this.frequencyB, yaw, pitch, roll, this.offsetX, this.offsetY,
-                this.offsetZ, this.renderMode);
+                this.offsetZ, this.renderMode, this.fov);
     }
 
     public CameraConfig withOffset(double x, double y, double z) {
         return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision,
                 this.redstoneControl, this.holdOn, this.redstoneMode, this.redstoneThreshold,
                 this.frequencyA, this.frequencyB, this.yawMode, this.pitchMode, this.rollMode,
-                x, y, z, this.renderMode);
+                x, y, z, this.renderMode, this.fov);
     }
 
     public CameraConfig withRenderMode(CameraRenderMode value) {
         return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision,
                 this.redstoneControl, this.holdOn, this.redstoneMode, this.redstoneThreshold,
                 this.frequencyA, this.frequencyB, this.yawMode, this.pitchMode, this.rollMode,
-                this.offsetX, this.offsetY, this.offsetZ, value);
+                this.offsetX, this.offsetY, this.offsetZ, value, this.fov);
     }
 
     // ------------------------------------------------------------------ NBT
@@ -256,6 +272,7 @@ public record CameraConfig(
     private static final String TAG_OFFSET_Y = "OffsetY";
     private static final String TAG_OFFSET_Z = "OffsetZ";
     private static final String TAG_RENDER_MODE = "RenderMode";
+    private static final String TAG_FOV = "Fov";
 
     /** Serialises the configuration, including the two frequency item stacks. */
     public CompoundTag toTag(HolderLookup.Provider registries) {
@@ -286,6 +303,7 @@ public record CameraConfig(
         tag.putDouble(TAG_OFFSET_Y, this.offsetY);
         tag.putDouble(TAG_OFFSET_Z, this.offsetZ);
         tag.putString(TAG_RENDER_MODE, this.renderMode.serializedName());
+        tag.putInt(TAG_FOV, this.fov);
         return tag;
     }
 
@@ -315,7 +333,8 @@ public record CameraConfig(
                 tag.contains(TAG_OFFSET_X) ? tag.getDouble(TAG_OFFSET_X) : 0.0D,
                 tag.contains(TAG_OFFSET_Y) ? tag.getDouble(TAG_OFFSET_Y) : 0.0D,
                 tag.contains(TAG_OFFSET_Z) ? tag.getDouble(TAG_OFFSET_Z) : 0.0D,
-                CameraRenderMode.byNameOrDefault(tag.getString(TAG_RENDER_MODE)));
+                CameraRenderMode.byNameOrDefault(tag.getString(TAG_RENDER_MODE)),
+                tag.contains(TAG_FOV) ? tag.getInt(TAG_FOV) : fallback.fov);
     }
 
     private static ItemStack readStack(CompoundTag parent, String key, HolderLookup.Provider registries) {
@@ -334,6 +353,10 @@ public record CameraConfig(
             }
         }
         return 30;
+    }
+
+    private static int clampFov(int value) {
+        return Math.max(MIN_FOV, Math.min(MAX_FOV, value));
     }
 
     private static double clampOffset(double value) {

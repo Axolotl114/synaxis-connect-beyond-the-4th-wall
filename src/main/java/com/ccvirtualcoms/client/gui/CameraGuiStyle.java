@@ -305,6 +305,13 @@ public final class CameraGuiStyle {
     // ------------------------------------------------------------------ controls
 
     /** Light rounded input background, matching Synaxis' SDF input texture. */
+    /** Pure white numeric input field, without shading. */
+    public static void numberInputBackground(GuiGraphics graphics, int x, int y, int width, int height) {
+        graphics.fill(x, y, x + width, y + height, 0xFFFFFFFF);
+        graphics.fill(x, y, x + width, y + 1, 0xFF9BA3AE);
+        graphics.fill(x, y + height - 1, x + width, y + height, 0xFF9BA3AE);
+    }
+
     public static void inputBackground(GuiGraphics graphics, int x, int y, int width, int height) {
         roundedRect(graphics, x, y, width, height, COLOR_INPUT_FILL, COLOR_INPUT_BORDER);
     }

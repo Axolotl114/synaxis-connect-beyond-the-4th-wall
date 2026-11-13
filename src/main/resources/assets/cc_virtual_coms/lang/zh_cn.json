@@ -29,7 +29,6 @@
   "block.cc_virtual_coms.camera_transmitter": "图传摄像头",
   "cc_virtual_coms.camera.title": "图传摄像头",
   "cc_virtual_coms.camera.tooltip.hint": "空手右键打开配置界面",
-
   "cc_virtual_coms.camera.page.video": "视频输出",
   "cc_virtual_coms.camera.page.trigger": "触发",
   "cc_virtual_coms.camera.page.camera": "相机",
@@ -38,7 +37,6 @@
   "cc_virtual_coms.camera.tooltip.page.trigger": "触发源、保持状态、红石阈值\n与 Create 无线红石频率槽。",
   "cc_virtual_coms.camera.tooltip.page.camera": "各轴的世界稳定/跟随子层\n模式与局部偏移。",
   "cc_virtual_coms.camera.tooltip.page.render_status": "光影策略与实时图传状态。",
-
   "cc_virtual_coms.camera.field.resolution": "分辨率",
   "cc_virtual_coms.camera.field.custom_width": "自定义宽",
   "cc_virtual_coms.camera.field.custom_height": "自定义高",
@@ -67,7 +65,6 @@
   "cc_virtual_coms.camera.field.revision": "修订号",
   "cc_virtual_coms.camera.field.device_slot": "设备槽位",
   "cc_virtual_coms.camera.field.detail": "详情",
-
   "cc_virtual_coms.camera.option.color.color": "彩色",
   "cc_virtual_coms.camera.option.color.mono": "黑白",
   "cc_virtual_coms.camera.option.on": "开",
@@ -83,14 +80,12 @@
   "cc_virtual_coms.camera.option.render.follow": "跟随玩家",
   "cc_virtual_coms.camera.option.render.off": "关",
   "cc_virtual_coms.camera.option.render.on": "开",
-
   "cc_virtual_coms.camera.status.streaming": "图传中",
   "cc_virtual_coms.camera.status.offline": "离线",
   "cc_virtual_coms.camera.status.driver_unavailable": "驱动不可用",
   "cc_virtual_coms.camera.value.none": "-",
   "cc_virtual_coms.camera.summary": "rev %s   %s   %s/15",
   "cc_virtual_coms.camera.button.done": "完成",
-
   "cc_virtual_coms.camera.tooltip.resolution": "左键循环预设；选到「自定义」（带 *）\n后可输入精确尺寸，右键返回上一项。",
   "cc_virtual_coms.camera.tooltip.custom_size": "自定义尺寸：宽 64-1920、高 64-1440，\n必须为偶数。帧调度器会按像素预算\n自动降低实际帧率。",
   "cc_virtual_coms.camera.tooltip.fps": "每秒帧数。帧率越高，\n服务端允许的分辨率越低。",
@@ -115,5 +110,7 @@
   "cc_virtual_coms.camera.tooltip.device_slot": "虚拟摄像头设备槽位；\n未分配时显示 -。",
   "cc_virtual_coms.camera.tooltip.detail": "服务端最近一条诊断信息。",
   "cc_virtual_coms.camera.tooltip.done": "关闭界面。\n所有修改都已实时发送到服务端。",
-  "cc_virtual_coms.camera.tooltip.priority": "触发优先级（3.4）：\n1. Synaxis 的 enable 端子\n2. 红石输入：\n   原版相邻信号，或\n   A/B 频率槽都放置时的\n   Create 无线红石链路\n3. 界面上的保持开/关\n\n触发源关闭：由保持状态决定。\n触发源开启：\n  enable=true -> 开（忽略红石）\n  enable=false, 信号>阈值\n    -> 保持模式下为开\n  enable=false, 信号<=阈值\n    -> 保持模式下为关\n  切换模式：上升沿翻转\n阈值比较 0-15 的红石信号。"
+  "cc_virtual_coms.camera.tooltip.priority": "触发优先级（3.4）：\n1. Synaxis 的 enable 端子\n2. 红石输入：\n   原版相邻信号，或\n   A/B 频率槽都放置时的\n   Create 无线红石链路\n3. 界面上的保持开/关\n\n触发源关闭：由保持状态决定。\n触发源开启：\n  enable=true -> 开（忽略红石）\n  enable=false, 信号>阈值\n    -> 保持模式下为开\n  enable=false, 信号<=阈值\n    -> 保持模式下为关\n  切换模式：上升沿翻转\n阈值比较 0-15 的红石信号。",
+  "cc_virtual_coms.camera.field.fov": "视场角",
+  "cc_virtual_coms.camera.tooltip.fov": "摄像头的垂直视场角（30-120 度），与玩家视场角无关。"
 }

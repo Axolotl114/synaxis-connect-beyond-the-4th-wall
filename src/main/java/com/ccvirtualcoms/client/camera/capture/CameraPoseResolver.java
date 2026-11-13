@@ -37,7 +37,7 @@ public final class CameraPoseResolver {
     public static final double DEFAULT_LENS_CLEARANCE = 0.5D;
 
     /** Small outward offset past the face plane so the lens never sits inside its own block. */
-    private static final double LENS_EPSILON = 0.03D;
+    private static final double LENS_EPSILON = 0.15D;
 
     /** System property to override the clearance for debugging. */
     public static final String LENS_CLEARANCE_PROPERTY = "cc_virtual_coms.camera.lensClearance";

@@ -503,42 +503,56 @@ public final class MjpegHttpServer {
     }
 
     private String buildIndexHtml() {
-        List<CameraStreamRegistry.Entry> entries = new ArrayList<>(CameraStreamRegistry.all());
-        entries.sort(Comparator.comparingLong(CameraStreamRegistry.Entry::key));
-        CameraDriverStatus.Snapshot driver = CameraDriverStatus.get();
-
-        StringBuilder html = new StringBuilder(1024);
-        html.append("<!doctype html><html><head><meta charset=\"utf-8\">")
-                .append("<title>CC Virtual Coms cameras</title>")
-                .append("<style>body{background:#121212;color:#ddd;font-family:monospace;padding:16px}")
-                .append("a{color:#6cf}img{max-width:480px;border:1px solid #333;margin:4px 0}")
-                .append(".off{color:#e66}.ok{color:#6c6}</style></head><body>");
-        html.append("<h1>CC Synaxis Virtual Coms - camera streams</h1>");
-        html.append("<p>Driver: <span class=\"").append(driver.available() ? "ok" : "off").append("\">")
-                .append(escapeHtml(driver.state().serializedName())).append("</span> - ")
-                .append(escapeHtml(driver.detail())).append("</p>");
-        html.append("<p>MJPEG fallback base: <code>http://").append(LOOPBACK).append(':')
-                .append(this.port).append("</code></p>");
-        if (entries.isEmpty()) {
-            html.append("<p>No camera transmitters registered on this client yet. ")
-                    .append("Place a camera transmitter block; the stream appears here.</p>");
-        }
-        for (CameraStreamRegistry.Entry entry : entries) {
-            long key = entry.key();
-            String name = entry.device() != null && !entry.device().deviceName().isBlank()
-                    ? entry.device().deviceName()
-                    : "Camera " + hexKey(key);
-            html.append("<h2>").append(escapeHtml(name)).append("</h2>");
-            html.append("<p>pos=").append(BlockPos.of(key).toShortString())
-                    .append(" status=").append(escapeHtml(entry.status() == null ? "?" : entry.status().serializedName()))
-                    .append("</p>");
-            html.append("<p><a href=\"/camera/").append(hexKey(key)).append("/stream.mjpeg\">stream.mjpeg</a> ")
-                    .append("| <a href=\"/camera/").append(hexKey(key)).append("/snapshot.jpg\">snapshot.jpg</a></p>");
-            html.append("<img src=\"/camera/").append(hexKey(key)).append("/stream.mjpeg\" alt=\"")
-                    .append(escapeHtml(name)).append("\">");
-        }
-        html.append("</body></html>");
-        return html.toString();
+        String base = "http://" + LOOPBACK + ":" + this.port;
+        return "<!doctype html><html><head><meta charset=\"utf-8\">"
+                + "<title>Synaxis cameras</title><style>"
+                + "body{background:#111;color:#ddd;font-family:monospace;margin:0;display:flex;height:100vh}"
+                + "#side{width:260px;border-right:1px solid #333;padding:10px;overflow:auto}"
+                + "#main{flex:1;padding:10px;display:flex;flex-direction:column}"
+                + "h1{font-size:16px;margin:0 0 10px}h2{font-size:13px;margin:0 0 6px}"
+                + "#list button{display:block;width:100%;text-align:left;background:#1c1c1c;color:#ddd;"
+                + "border:1px solid #333;padding:6px;margin-bottom:4px;cursor:pointer;font-family:monospace}"
+                + "#list button.sel{border-color:#6cf;color:#6cf}"
+                + ".ok{color:#6c6}.off{color:#e66}"
+                + "#view{max-width:100%;max-height:calc(100vh - 80px);border:1px solid #333;"
+                + "background:#000;align-self:flex-start}"
+                + "#meta{color:#999;font-size:12px;margin-top:6px}</style></head><body>"
+                + "<div id=\"side\"><h1>Synaxis 摄像头</h1><div id=\"driver\"></div>"
+                + "<div id=\"list\"></div></div>"
+                + "<div id=\"main\"><h2 id=\"title\">选择一个摄像头</h2>"
+                + "<img id=\"view\" alt=\"camera stream\">"
+                + "<div id=\"meta\"></div></div>"
+                + "<script>"
+                + "let current=null;"
+                + "async function refresh(){"
+                + " let data; try{data=await (await fetch('/api/cameras')).json();}catch(e){return;}"
+                + " const d=document.getElementById('driver');"
+                + " d.innerHTML='驱动: <span class=\"'+(data.driver.available?'ok':'off')+'\">'"
+                + "   +data.driver.state+'</span> <span class=off>'+data.driver.detail+'</span>';"
+                + " const list=document.getElementById('list'); const arr=data.cameras||[];"
+                + " list.innerHTML='';"
+                + " if(!arr.length){list.innerHTML='<div class=off>没有检测到摄像头</div>';}"
+                + " for(const c of arr){const b=document.createElement('button');"
+                + "  b.innerHTML='<b>'+c.name+'</b><br><span class=\"'+(c.status==='streaming'?'ok':'off')"
+                + "   +'\">'+c.status+'</span> '+c.width+'x'+c.height+' '+c.fps+'fps';"
+                + "  if(current===c.key)b.className='sel';"
+                + "  b.onclick=()=>{select(c);};"
+                + "  list.appendChild(b);}"
+                + " if(!current&&arr.length){select(arr[0]);}"
+                + "}"
+                + "function select(c){current=c.key;"
+                + " document.getElementById('title').textContent=c.name+' — '+c.key;"
+                + " const img=document.getElementById('view');"
+                + " img.src='/camera/'+c.key+'/stream.mjpeg?t='+Date.now();"
+                + " document.getElementById('meta').textContent='pos '+(c.x+','+c.y+','+c.z)+"
+                + "  '  status '+c.status+'  '+c.device_name;"
+                + " const list=document.getElementById('list');"
+                + " for(const b of list.children)b.className='';"
+                + " if(list.children[Array.from(list.children).findIndex(b=>b.innerHTML.includes(c.name))])"
+                + "  list.children[Array.from(list.children).findIndex(b=>b.innerHTML.includes(c.name))].className='sel';"
+                + "}"
+                + "refresh();setInterval(refresh,3000);"
+                + "</script></body></html>";
     }
 
     // ------------------------------------------------------------------ HTTP plumbing

@@ -53,7 +53,7 @@ class CameraConfigTest {
                                     CameraRenderMode renderMode) {
         return new CameraConfig(CameraConfig.DEFAULT.resolution(), fps, color, nightVision, redstoneControl,
                 holdOn, redstoneMode, threshold, ItemStack.EMPTY, ItemStack.EMPTY, yaw, pitch, roll,
-                offsetX, offsetY, offsetZ, renderMode);
+                offsetX, offsetY, offsetZ, renderMode, CameraConfig.DEFAULT_FOV);
     }
 
     // ------------------------------------------------------------------ defaults
@@ -84,7 +84,8 @@ class CameraConfigTest {
     @Test
     void nullComponentsFallBackToTheDefaults() {
         CameraConfig config = new CameraConfig(null, 30, true, false, false, false,
-                null, 0, null, null, null, null, null, 0, 0, 0, null);
+                null, 0, null, null, null, null, null, 0, 0, 0, null,
+                CameraConfig.DEFAULT_FOV);
 
         assertEquals(CameraResolution.DEFAULT, config.resolution());
         assertEquals(CameraRedstoneMode.HOLD, config.redstoneMode());

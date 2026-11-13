@@ -79,6 +79,7 @@ public final class CameraCapturePipeline {
     @Nullable
     private PendingCapture pending;
     private boolean capturing;
+    private int captureFov;
     private boolean savedBobView;
     private int savedHurtTime;
     private int savedHurtDuration;
@@ -264,6 +265,7 @@ public final class CameraCapturePipeline {
                 resolved.pose().yaw(), resolved.pose().pitch());
         this.pending = new PendingCapture(best, bestSession, resolution.width(),
                 resolution.height(), now);
+        this.captureFov = config.fov();
         this.isolatePlayerCameraFeedback(minecraft);
     }
 
@@ -297,6 +299,7 @@ public final class CameraCapturePipeline {
         } finally {
             this.override = null;
             this.pending = null;
+            this.captureFov = 0;
             this.restorePlayerCameraFeedback(minecraft);
             // Hold the previous complete player frame on screen (frame hold, not a flash).
             this.frameBackup.restore(minecraft);
@@ -317,6 +320,11 @@ public final class CameraCapturePipeline {
             capture.session.droppedFrames++;
             this.drops++;
         }
+    }
+
+    /** Vertical FOV to force for the current capture frame, or {@code 0} when none is active. */
+    public int captureFov() {
+        return this.captureFov;
     }
 
     /** Camera override for the current capture frame, polled by {@code CameraCaptureMixin}. */

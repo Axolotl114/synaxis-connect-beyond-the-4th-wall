@@ -6,6 +6,7 @@
   "client": [
     "client.CameraCaptureMixin",
     "client.GameRendererCaptureMixin",
+    "client.GameRendererFovMixin",
     "client.GameRendererAccess"
   ],
   "injectors": {

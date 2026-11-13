@@ -132,6 +132,7 @@ public class CameraTransmitterScreen extends Screen {
     private String widthDraft = "";
     private String heightDraft = "";
     private String thresholdDraft = "";
+    private String fovDraft = "";
     private String offsetXDraft = "";
     private String offsetYDraft = "";
     private String offsetZDraft = "";
@@ -163,6 +164,7 @@ public class CameraTransmitterScreen extends Screen {
         this.widthDraft = Integer.toString(server.resolution().width());
         this.heightDraft = Integer.toString(server.resolution().height());
         this.thresholdDraft = Integer.toString(server.redstoneThreshold());
+        this.fovDraft = Integer.toString(server.fov());
         this.offsetXDraft = formatOffset(server.offsetX());
         this.offsetYDraft = formatOffset(server.offsetY());
         this.offsetZDraft = formatOffset(server.offsetZ());
@@ -443,6 +445,11 @@ public class CameraTransmitterScreen extends Screen {
                 () -> this.markChanged(this.config.withColor(!this.config.color())),
                 Tooltip.create(Component.translatable("cc_virtual_coms.camera.tooltip.color")));
 
+        this.addRowLabel(6, "cc_virtual_coms.camera.field.fov");
+        this.addEditor(6, this.fovDraft, 0, 40, 3, DIGITS, this::onFovChanged,
+                Tooltip.create(Component.translatable("cc_virtual_coms.camera.tooltip.fov")));
+        this.addSuffix(6, "°");
+
         this.addToggle(5, "cc_virtual_coms.camera.field.night_vision",
                 () -> this.config.nightVision(),
                 () -> Component.translatable("cc_virtual_coms.camera.option.on"),
@@ -493,6 +500,15 @@ public class CameraTransmitterScreen extends Screen {
         this.customResolution = true;
         this.updateEditorStates();
         this.markChanged(this.config.withResolution(CameraResolution.sanitized(width, height)));
+    }
+
+    private void onFovChanged(String value) {
+        this.fovDraft = value;
+        if (value.isEmpty()) {
+            return;
+        }
+        int fov = this.parseOrDefault(value, this.config.fov());
+        this.markChanged(this.config.withFov(fov));
     }
 
     private void onHeightChanged(String value) {
@@ -558,21 +574,6 @@ public class CameraTransmitterScreen extends Screen {
                 priorityTooltip("cc_virtual_coms.camera.tooltip.threshold"));
         this.addSuffix(3, "/ 15");
 
-        this.addRowLabel(4, "cc_virtual_coms.camera.field.frequency_a");
-        this.addGhostSlot(4, () -> this.config.frequencyA(),
-                stack -> this.markChanged(this.config.withFrequencies(stack,
-                        this.config.frequencyB())),
-                () -> this.markChanged(this.config.withFrequencies(ItemStack.EMPTY,
-                        this.config.frequencyB())),
-                "cc_virtual_coms.camera.tooltip.frequency_a");
-
-        this.addRowLabel(5, "cc_virtual_coms.camera.field.frequency_b");
-        this.addGhostSlot(5, () -> this.config.frequencyB(),
-                stack -> this.markChanged(this.config.withFrequencies(this.config.frequencyA(),
-                        stack)),
-                () -> this.markChanged(this.config.withFrequencies(this.config.frequencyA(),
-                        ItemStack.EMPTY)),
-                "cc_virtual_coms.camera.tooltip.frequency_b");
 
         this.addReadonly(6, "cc_virtual_coms.camera.field.redstone_signal",
                 () -> Component.literal(this.redstoneSignal() + " / 15"),
@@ -843,7 +844,7 @@ public class CameraTransmitterScreen extends Screen {
         // Static backgrounds of the text inputs. The EditBox itself is drawn unbordered so the
         // Synaxis light input style shows through.
         for (InputSurface surface : this.inputSurfaces) {
-            CameraGuiStyle.inputBackground(graphics, surface.x(), surface.y(), surface.width(),
+            CameraGuiStyle.numberInputBackground(graphics, surface.x(), surface.y(), surface.width(),
                     surface.height());
             if (surface.box().isFocused()) {
                 CameraGuiStyle.focusBorder(graphics, surface.x(), surface.y(), surface.width(),

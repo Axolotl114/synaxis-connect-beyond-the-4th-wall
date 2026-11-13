@@ -29,7 +29,6 @@
   "block.cc_virtual_coms.camera_transmitter": "Camera Transmitter",
   "cc_virtual_coms.camera.title": "Camera Transmitter",
   "cc_virtual_coms.camera.tooltip.hint": "Right-click with an empty hand to configure",
-
   "cc_virtual_coms.camera.page.video": "Video Output",
   "cc_virtual_coms.camera.page.trigger": "Trigger",
   "cc_virtual_coms.camera.page.camera": "Camera",
@@ -38,7 +37,6 @@
   "cc_virtual_coms.camera.tooltip.page.trigger": "Trigger source, hold state,\nredstone threshold and the\nCreate wireless frequency slots.",
   "cc_virtual_coms.camera.tooltip.page.camera": "Per-axis world / sub-level\nmode and the local offset.",
   "cc_virtual_coms.camera.tooltip.page.render_status": "Shader preference and the\nlive stream status.",
-
   "cc_virtual_coms.camera.field.resolution": "Resolution",
   "cc_virtual_coms.camera.field.custom_width": "Custom width",
   "cc_virtual_coms.camera.field.custom_height": "Custom height",
@@ -67,7 +65,6 @@
   "cc_virtual_coms.camera.field.revision": "Revision",
   "cc_virtual_coms.camera.field.device_slot": "Device slot",
   "cc_virtual_coms.camera.field.detail": "Detail",
-
   "cc_virtual_coms.camera.option.color.color": "Colour",
   "cc_virtual_coms.camera.option.color.mono": "Mono",
   "cc_virtual_coms.camera.option.on": "On",
@@ -83,14 +80,12 @@
   "cc_virtual_coms.camera.option.render.follow": "Follow",
   "cc_virtual_coms.camera.option.render.off": "Off",
   "cc_virtual_coms.camera.option.render.on": "On",
-
   "cc_virtual_coms.camera.status.streaming": "Streaming",
   "cc_virtual_coms.camera.status.offline": "Offline",
   "cc_virtual_coms.camera.status.driver_unavailable": "Driver unavailable",
   "cc_virtual_coms.camera.value.none": "-",
   "cc_virtual_coms.camera.summary": "rev %s   %s   %s/15",
   "cc_virtual_coms.camera.button.done": "Done",
-
   "cc_virtual_coms.camera.tooltip.resolution": "Click to cycle presets.\nCustom (*) lets you type an\nexact size; right click goes back.",
   "cc_virtual_coms.camera.tooltip.custom_size": "Custom size: 64-1920 wide,\n64-1440 high, even numbers.\nThe frame scheduler may lower\nthe effective frame rate to\nfit the pixel budget.",
   "cc_virtual_coms.camera.tooltip.fps": "Frames per second. Higher fps\nlowers the maximum resolution\nthe server allows.",
@@ -115,5 +110,7 @@
   "cc_virtual_coms.camera.tooltip.device_slot": "Virtual camera device slot,\nor - when none is assigned.",
   "cc_virtual_coms.camera.tooltip.detail": "Last diagnostic message\nfrom the server.",
   "cc_virtual_coms.camera.tooltip.done": "Close the screen. All changes\nare already sent to the server.",
-  "cc_virtual_coms.camera.tooltip.priority": "Trigger priority (3.4):\n1. Synaxis enable terminal\n2. Redstone input:\n   vanilla neighbours, or\n   Create wireless link when\n   frequency A and B are set\n3. GUI hold state\n\nSource OFF: hold state wins.\nSource ON:\n  enable=true -> ON (RS ignored)\n  enable=false, signal>thr\n    -> ON in HOLD mode\n  enable=false, signal<=thr\n    -> OFF in HOLD mode\n  TOGGLE: rising edge flips\nThreshold compares 0-15 signal."
+  "cc_virtual_coms.camera.tooltip.priority": "Trigger priority (3.4):\n1. Synaxis enable terminal\n2. Redstone input:\n   vanilla neighbours, or\n   Create wireless link when\n   frequency A and B are set\n3. GUI hold state\n\nSource OFF: hold state wins.\nSource ON:\n  enable=true -> ON (RS ignored)\n  enable=false, signal>thr\n    -> ON in HOLD mode\n  enable=false, signal<=thr\n    -> OFF in HOLD mode\n  TOGGLE: rising edge flips\nThreshold compares 0-15 signal.",
+  "cc_virtual_coms.camera.field.fov": "Field of view",
+  "cc_virtual_coms.camera.tooltip.fov": "Camera vertical field of view in degrees (30-120). Independent of the player FOV."
 }
