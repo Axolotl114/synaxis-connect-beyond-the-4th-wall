@@ -1,30 +1,39 @@
 package com.ccvirtualcoms.client.camera.autotest;
 
 import com.ccvirtualcoms.CCVirtualComs;
+import com.ccvirtualcoms.camera.CameraConfig;
+import com.ccvirtualcoms.camera.CameraResolution;
 import com.ccvirtualcoms.camera.api.CameraFrame;
 import com.ccvirtualcoms.client.camera.capture.CameraCaptureRuntime;
 import com.ccvirtualcoms.client.camera.capture.CameraPngDump;
 import com.ccvirtualcoms.client.camera.capture.CapturedCamera;
+import com.ccvirtualcoms.client.camera.stream.CameraStreamService;
 import com.ccvirtualcoms.client.gui.CameraTabButton;
 import com.ccvirtualcoms.client.gui.CameraTransmitterScreen;
+import com.ccvirtualcoms.net.CameraConfigPayload;
+import com.mojang.blaze3d.platform.NativeImage;
 import java.io.File;
+import java.nio.file.Files;
+import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.components.events.GuiEventListener;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
  * Scripted client smoke test, enabled with {@code -Dcc_virtual_coms.autotest=1}, the
  * {@code CCVC_AUTOTEST=1} environment variable, or a {@code ccvc_autotest.flag} file in the game
  * directory.
  *
- * <p>Used by the development workflow to produce reproducible evidence without manual mouse input:
- * once a level is loaded it finds a tracked camera, opens its configuration screen, captures one
- * screenshot per GUI page by pressing the page tabs, forces the capture pipeline on, and writes the
- * newest captured frame for every camera as a PNG. Everything it does is logged under
- * {@code [camera-autotest]}.
- *
- * <p>Driven explicitly from {@code CameraCaptureEvents.onClientTick}; it does nothing in normal
- * play.
+ * <p>Produces reproducible evidence without manual mouse input:
+ * <ol>
+ *   <li>finds a tracked camera and opens its configuration screen;</li>
+ *   <li>captures one screenshot per GUI page by pressing the page tabs;</li>
+ *   <li>cycles output variants (monochrome, monochrome + night vision, 1280x720) through the real
+ *       client payload and writes the captured frame of each variant as a PNG;</li>
+ *   <li>restores the original configuration.</li>
+ * </ol>
+ * Everything it does is logged under {@code [camera-autotest]}. It does nothing in normal play.
  */
 public final class CameraAutotest {
 
@@ -36,7 +45,21 @@ public final class CameraAutotest {
     private static boolean finished;
     private static int phase;
     private static int pageIndex;
+    private static int variantIndex;
     private static long deadlineTick;
+    private static CapturedCamera subject;
+    private static CameraConfig originalConfig;
+    private static List<Variant> variants = List.of();
+
+    private record Variant(String name, CameraConfig config) {
+    }
+
+    private static List<Variant> variantsFor(CameraConfig base) {
+        return List.of(
+                new Variant("bw", base.withColor(false)),
+                new Variant("thermal", base.withColor(false).withNightVision(true)),
+                new Variant("hd720", base.withResolution(new CameraResolution(1280, 720))));
+    }
 
     private CameraAutotest() {
     }
@@ -70,8 +93,8 @@ public final class CameraAutotest {
         if (Boolean.getBoolean(ENABLE_PROPERTY) || "1".equals(System.getenv("CCVC_AUTOTEST"))) {
             return true;
         }
-        // File marker fallback, because neither the JVM property nor the inherited environment
-        // reliably reach the forked game process in the development launcher.
+        // File marker fallback: neither the JVM property nor the inherited environment reliably
+        // reach the forked game process in the development launcher.
         return new File(Minecraft.getInstance().gameDirectory, "ccvc_autotest.flag").isFile();
     }
 
@@ -87,9 +110,32 @@ public final class CameraAutotest {
             case 3 -> {
                 if (ticks >= deadlineTick) {
                     minecraft.setScreen(null);
-                    dumpFrames();
+                    dumpFrames("initial");
+                    subject = streamingCamera(minecraft);
+                    if (subject == null) {
+                        CCVirtualComs.LOGGER.warn("[camera-autotest] no streaming camera for variants");
+                        finished = true;
+                        return;
+                    }
+                    originalConfig = subject.config();
+                    variants = variantsFor(originalConfig);
+                    variantIndex = 0;
                     phase = 4;
-                    deadlineTick = ticks + 20;
+                }
+            }
+            case 4 -> applyVariant(minecraft);
+            case 5 -> {
+                if (ticks >= deadlineTick) {
+                    Variant variant = variants.get(variantIndex);
+                    dumpEncodedFrame(subject, "variant_" + variant.name());
+                    variantIndex++;
+                    if (variantIndex < variants.size()) {
+                        phase = 4;
+                    } else {
+                        restoreConfiguration(minecraft);
+                        phase = 6;
+                        deadlineTick = ticks + 40;
+                    }
                 }
             }
             default -> {
@@ -112,16 +158,27 @@ public final class CameraAutotest {
         }
         CCVirtualComs.LOGGER.info("[camera-autotest] found camera at {} ({}); opening GUI",
                 camera.pos(), camera.describe());
+        normalizeConfigurations();
         if (minecraft.level.getBlockEntity(camera.pos())
                 instanceof com.ccvirtualcoms.content.camera.CameraTransmitterBlockEntity be) {
             minecraft.setScreen(new CameraTransmitterScreen(be));
         }
-        // Force the capture pipeline on so a real frame is available even when the server-side
-        // trigger resolves to offline.
-        CameraCaptureRuntime.get().toggleForceProduce();
         pageIndex = 0;
         phase = 1;
         deadlineTick = ticks;
+    }
+
+    /**
+     * Makes the test world deterministic: streaming cameras hold on, every other camera uses the
+     * documented default. This also repairs configurations edited during earlier manual runs.
+     */
+    private static void normalizeConfigurations() {
+        for (CapturedCamera camera : CameraCaptureRuntime.get().cameras()) {
+            CameraConfig config = camera.streaming()
+                    ? CameraConfig.DEFAULT.withHoldOn(true)
+                    : CameraConfig.DEFAULT;
+            PacketDistributor.sendToServer(new CameraConfigPayload(camera.pos(), config));
+        }
     }
 
     private static void selectPage(Minecraft minecraft, int index) {
@@ -161,6 +218,28 @@ public final class CameraAutotest {
         }
     }
 
+    private static void applyVariant(Minecraft minecraft) {
+        Variant variant = variants.get(variantIndex);
+        if (minecraft.level.getBlockEntity(subject.pos())
+                instanceof com.ccvirtualcoms.content.camera.CameraTransmitterBlockEntity) {
+            PacketDistributor.sendToServer(new CameraConfigPayload(subject.pos(), variant.config()));
+            CCVirtualComs.LOGGER.info("[camera-autotest] requested variant {} ({}x{}, color={}, night={})",
+                    variant.name(), variant.config().resolution().width(),
+                    variant.config().resolution().height(), variant.config().color(),
+                    variant.config().nightVision());
+        }
+        deadlineTick = ticks + 40;
+        phase = 5;
+    }
+
+    private static void restoreConfiguration(Minecraft minecraft) {
+        if (originalConfig != null && minecraft.level.getBlockEntity(subject.pos())
+                instanceof com.ccvirtualcoms.content.camera.CameraTransmitterBlockEntity) {
+            PacketDistributor.sendToServer(new CameraConfigPayload(subject.pos(), originalConfig));
+            CCVirtualComs.LOGGER.info("[camera-autotest] restored original configuration");
+        }
+    }
+
     private static CapturedCamera nearestCamera(Minecraft minecraft) {
         CapturedCamera best = null;
         double bestDistance = Double.MAX_VALUE;
@@ -174,17 +253,58 @@ public final class CameraAutotest {
         return best;
     }
 
-    private static void dumpFrames() {
+    private static CapturedCamera streamingCamera(Minecraft minecraft) {
         for (CapturedCamera camera : CameraCaptureRuntime.get().cameras()) {
-            CameraFrame frame = camera.latestFrame();
-            if (frame == null) {
-                CCVirtualComs.LOGGER.warn("[camera-autotest] camera {} has no frame yet ({})",
-                        camera.pos(), camera.describe());
-                continue;
+            if (camera.streaming()) {
+                return camera;
             }
-            File file = CameraPngDump.write(camera.key(), frame);
-            CCVirtualComs.LOGGER.info("[camera-autotest] camera {} frame {}x{} seq={} -> {}",
-                    camera.pos(), frame.width(), frame.height(), frame.sequence(), file);
         }
+        return nearestCamera(minecraft);
+    }
+
+    private static void dumpFrames(String tag) {
+        for (CapturedCamera camera : CameraCaptureRuntime.get().cameras()) {
+            dumpCameraFrame(camera, tag);
+        }
+    }
+
+    private static void dumpCameraFrame(CapturedCamera camera, String tag) {
+        CameraFrame frame = camera.latestFrame();
+        if (frame == null) {
+            CCVirtualComs.LOGGER.warn("[camera-autotest] camera {} has no frame yet for {} ({})",
+                    camera.pos(), tag, camera.describe());
+            return;
+        }
+        File file = new File(Minecraft.getInstance().gameDirectory,
+                "screenshots/camera_" + tag + "_" + Long.toHexString(camera.key()) + ".png");
+        try (NativeImage image = new NativeImage(frame.width(), frame.height(), false)) {
+            CameraPngDump.copyPixels(frame, image);
+            image.writeToFile(file);
+        } catch (Exception failure) {
+            CCVirtualComs.LOGGER.warn("[camera-autotest] writing {} failed: {}", file, failure.toString());
+            return;
+        }
+        CCVirtualComs.LOGGER.info("[camera-autotest] camera {} {} frame {}x{} seq={} -> {}",
+                camera.pos(), tag, frame.width(), frame.height(), frame.sequence(), file);
+    }
+
+    /** Writes the newest *encoded* MJPEG frame, which carries colour/monochrome/night processing. */
+    private static void dumpEncodedFrame(CapturedCamera camera, String tag) {
+        byte[] jpeg = CameraStreamService.get().latestEncodedFrame(camera.key());
+        if (jpeg == null || jpeg.length == 0) {
+            CCVirtualComs.LOGGER.warn("[camera-autotest] camera {} has no encoded frame for {} ({})",
+                    camera.pos(), tag, camera.describe());
+            return;
+        }
+        File file = new File(Minecraft.getInstance().gameDirectory,
+                "screenshots/camera_" + tag + "_" + Long.toHexString(camera.key()) + ".jpg");
+        try {
+            Files.write(file.toPath(), jpeg);
+        } catch (Exception failure) {
+            CCVirtualComs.LOGGER.warn("[camera-autotest] writing {} failed: {}", file, failure.toString());
+            return;
+        }
+        CCVirtualComs.LOGGER.info("[camera-autotest] camera {} {} encoded frame {} bytes -> {}",
+                camera.pos(), tag, jpeg.length, file);
     }
 }

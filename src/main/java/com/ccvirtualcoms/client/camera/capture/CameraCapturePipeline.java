@@ -53,6 +53,12 @@ public final class CameraCapturePipeline {
     /** System property overriding the readback pixel budget. */
     public static final String PIXEL_BUDGET_PROPERTY = "cc_virtual_coms.camera.pixelBudget";
 
+    /**
+     * Minimum spacing between main-target captures. Each one forces the player's view to be rendered
+     * twice, so this is deliberately far below the display frame rate (10 captures per second).
+     */
+    public static final long MAIN_TARGET_MIN_INTERVAL_NANOS = 100_000_000L;
+
     /** Fallback vertical field of view until the GUI exposes an FOV setting. */
     public static final float DEFAULT_FOV_DEGREES = 70.0F;
 
@@ -78,6 +84,7 @@ public final class CameraCapturePipeline {
     private long failures;
     private long lastReadbackNanos;
     private long lastCaptureNanos;
+    private boolean mainTargetFlickerLogged;
 
     private CameraCapturePipeline() {
     }
@@ -112,6 +119,7 @@ public final class CameraCapturePipeline {
         int readerHeight = -1;
         long lastCaptureNanos;
         long pendingCaptureNanos;
+        long lastMainTargetCaptureNanos;
         int sequence;
         long capturedFrames;
         long droppedFrames;
@@ -234,17 +242,20 @@ public final class CameraCapturePipeline {
     }
 
     /**
-     * Performs the selected capture: renders off-screen (Iris absent) or blits the main target
-     * (Iris present), then starts the asynchronous readback. Runs after the level has been rendered
-     * and before the hand/GUI, which is the earliest point where the main target holds a final
-     * shader-composited image.
+     * Performs the selected capture: renders off-screen (no active shader pack) or blits the main
+     * target (shader pack active), then starts the asynchronous readback. Runs after the level has
+     * been rendered and before the hand/GUI.
+     *
+     * @return {@code true} when the main render target was captured and the caller must re-render
+     *         the player's view before the frame is presented (otherwise the player would briefly
+     *         see the camera view - the "flicker" this path is known for)
      */
-    public void onAfterLevelRender() {
+    public boolean onAfterLevelRender() {
         CaptureRequest request = this.pending;
         this.pending = null;
         this.override = null;
         if (request == null) {
-            return;
+            return false;
         }
         Minecraft minecraft = Minecraft.getInstance();
         Session session = request.session();
@@ -252,9 +263,23 @@ public final class CameraCapturePipeline {
         CameraConfig config = camera.config();
         int width = config.resolution().width();
         int height = config.resolution().height();
+        boolean mainTargetCaptured = false;
         try {
+            boolean isMainTarget = request.path() == CapturePath.MAIN_TARGET;
+            if (isMainTarget) {
+                long now = System.nanoTime();
+                // Main-target capture re-renders the player view afterwards, so keep it well below
+                // the display rate: at most ten captures per second.
+                if (now - session.lastMainTargetCaptureNanos < MAIN_TARGET_MIN_INTERVAL_NANOS) {
+                    session.droppedFrames++;
+                    this.drops++;
+                    session.detail = "main-target capture throttled to keep the player view stable";
+                    return false;
+                }
+                session.lastMainTargetCaptureNanos = now;
+            }
             boolean issued;
-            if (request.path() == CapturePath.MAIN_TARGET) {
+            if (isMainTarget) {
                 issued = this.captureMainTarget(minecraft, session, width, height);
             } else {
                 issued = this.captureOffscreen(minecraft, camera, session, width, height);
@@ -263,6 +288,7 @@ public final class CameraCapturePipeline {
                 session.lastCaptureNanos = request.requestedNanos();
                 session.pendingCaptureNanos = request.requestedNanos();
                 this.lastCaptureNanos = request.requestedNanos();
+                mainTargetCaptured = isMainTarget;
             } else {
                 session.droppedFrames++;
                 this.drops++;
@@ -277,6 +303,7 @@ public final class CameraCapturePipeline {
             // The main target must be the draw target again for the hand and GUI passes.
             minecraft.getMainRenderTarget().bindWrite(false);
         }
+        return mainTargetCaptured;
     }
 
     /** Polls finished readbacks and publishes them to the cameras. */
@@ -410,20 +437,34 @@ public final class CameraCapturePipeline {
 
     private CapturePath resolvePath(CapturedCamera camera, Session session, CameraConfig config) {
         boolean iris = IrisCompat.irisInstalled();
+        boolean shadersActive = iris && IrisCompat.shaderPackInUse();
         CameraRenderMode mode = config.renderMode();
         CapturePath path;
         String degradation = null;
-        if (iris) {
+        if (shadersActive) {
             path = CapturePath.MAIN_TARGET;
+            // The shader pipeline only presents the final image into the main render target, so
+            // capturing it requires rendering the camera view inside the player's frame. That is
+            // visible for one frame per capture while shaders are on; without shaders we avoid it.
             if (mode == CameraRenderMode.OFF) {
-                degradation = "Iris installed: a private off-screen target would stay black, "
-                        + "main-target capture used instead";
-            } else if (mode == CameraRenderMode.ON && !IrisCompat.shaderPackInUse()) {
-                degradation = "no shader pack is active, so shader rendering is unavailable";
+                degradation = "shader pack is active: a private target would stay black, main-target "
+                        + "capture used instead (the player view moves for one frame per capture)";
+            } else {
+                degradation = "shader pack active: main-target capture (the player view moves for one "
+                        + "frame per capture)";
+            }
+            if (!this.mainTargetFlickerLogged) {
+                this.mainTargetFlickerLogged = true;
+                CCVirtualComs.LOGGER.warn("[camera] Shader pack active: capture uses the main render "
+                        + "target, so the player view may jump for one frame per captured frame. "
+                        + "Disable shaders if that flicker is distracting.");
             }
         } else {
             path = CapturePath.OFFSCREEN;
-            if (mode == CameraRenderMode.ON) {
+            if (iris) {
+                degradation = "Iris present but no shader pack is active; off-screen capture keeps "
+                        + "the player view untouched";
+            } else if (mode == CameraRenderMode.ON) {
                 degradation = "Iris is not installed, so shaders cannot be used; off-screen capture";
             }
         }

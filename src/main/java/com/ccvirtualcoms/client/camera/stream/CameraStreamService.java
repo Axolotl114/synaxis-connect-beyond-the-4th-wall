@@ -143,6 +143,17 @@ public final class CameraStreamService {
         return this.running;
     }
 
+    /**
+     * The newest encoded JPEG frame for a camera, or {@code null} when nothing was published yet.
+     *
+     * <p>Exposes exactly what the MJPEG fallback would serve, including the colour / monochrome /
+     * night-vision processing, which the raw RGBA capture frame does not carry.
+     */
+    public byte @Nullable [] latestEncodedFrame(long key) {
+        MjpegHttpServer current = this.server;
+        return current == null ? null : current.latestJpeg(key);
+    }
+
     /** Why the last start attempt failed, or an empty string. */
     public String startFailure() {
         return this.startFailure;

@@ -234,13 +234,10 @@ public class CameraTransmitterScreen extends Screen {
             return;
         }
         int revision = camera.revision();
-        // Ask the server for one status snapshot on open so the status page is not blank until the
-        // next periodic sync. An unchanged configuration is a no-op on the server but still sends
-        // the snapshot back, so this does not bump the revision.
-        if (!this.initialStatusRequested) {
-            this.initialStatusRequested = true;
-            PacketDistributor.sendToServer(new CameraConfigPayload(this.pos, this.config));
-        }
+        // The server pushes a status snapshot on load and periodically, so nothing is sent on open.
+        // Sending our (possibly stale) snapshot here used to race with another client or with a
+        // configuration change and could silently revert the server state.
+        this.initialStatusRequested = true;
         if (revision != this.lastServerRevision) {
             this.lastServerRevision = revision;
             // A revision change means the server accepted a snapshot (ours or somebody else's).

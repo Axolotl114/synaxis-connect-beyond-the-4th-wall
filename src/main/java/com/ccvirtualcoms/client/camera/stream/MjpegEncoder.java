@@ -204,9 +204,13 @@ public final class MjpegEncoder {
         int targetHeight = config.resolution().height();
         boolean colour = config.color();
         boolean nightVision = config.nightVision();
+        // Monochrome + night vision is a false-colour thermal palette, so that combination needs an
+        // RGB raster even though the user asked for "monochrome". Writing three channels into a
+        // single-channel grey raster used to throw and silently keep the previous frame.
+        boolean falseColour = !colour && nightVision;
 
         BufferedImage image = new BufferedImage(targetWidth, targetHeight,
-                colour ? BufferedImage.TYPE_3BYTE_BGR : BufferedImage.TYPE_BYTE_GRAY);
+                (colour || falseColour) ? BufferedImage.TYPE_3BYTE_BGR : BufferedImage.TYPE_BYTE_GRAY);
         byte[] destination = ((DataBufferByte) image.getRaster().getDataBuffer()).getData();
         byte[] source = frame.rgba();
         int sourceWidth = frame.width();

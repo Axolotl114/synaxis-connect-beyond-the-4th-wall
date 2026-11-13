@@ -400,6 +400,17 @@ public final class MjpegHttpServer {
         return frame != null ? frame.jpeg() : placeholderFor(key);
     }
 
+    /**
+     * The newest encoded JPEG for a camera, or {@code null} when nothing has been published.
+     *
+     * <p>Used by the development autotest to prove that colour/monochrome/night-vision settings are
+     * applied at the encoding stage (the raw capture frame is always RGBA).
+     */
+    public @Nullable byte[] latestJpeg(long key) {
+        PublishedFrame frame = this.latest.get(key);
+        return frame == null ? null : frame.jpeg();
+    }
+
     private byte[] placeholderFor(long key) {
         @Nullable CameraStreamRegistry.Entry entry = CameraStreamRegistry.get(key);
         if (entry != null && entry.config() != null) {
