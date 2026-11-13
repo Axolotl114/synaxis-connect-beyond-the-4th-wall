@@ -40,13 +40,6 @@ public final class CameraCaptureEvents {
      * <p>The same value is passed to Sable's {@code renderPose(partialTick)}, so the camera and the
      * ship geometry use the identical interpolated pose in a frame.
      */
-    /** Renders the selected camera view into a private target before the player frame starts. */
-    @SubscribeEvent
-    public static void onRenderFramePre(RenderFrameEvent.Pre event) {
-        CameraCaptureRuntime.get().captureFrame(
-                event.getPartialTick().getGameTimeDeltaPartialTick(true));
-    }
-
     @SubscribeEvent
     public static void onRenderFrame(RenderFrameEvent.Post event) {
         CameraCaptureRuntime.get().renderFrame(

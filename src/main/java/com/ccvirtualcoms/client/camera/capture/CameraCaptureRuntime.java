@@ -112,7 +112,11 @@ public final class CameraCaptureRuntime {
         if (Float.isFinite(partialTick) && partialTick >= 0.0F && partialTick <= 1.0F) {
             this.partialTick = partialTick;
         }
-        CameraCapturePipeline.get().onFrameEnd();
+        // Runs after the GUI is drawn and before the buffer swap: capture into the private target,
+        // then put the player's finished frame back so the camera view is never presented.
+        CameraCapturePipeline pipeline = CameraCapturePipeline.get();
+        pipeline.captureFrame();
+        pipeline.onFrameEnd();
     }
 
     /** Drops every camera and its registry entry when the client leaves the level. */

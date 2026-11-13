@@ -54,6 +54,12 @@ public final class CameraCapturePipeline {
     public static final String PIXEL_BUDGET_PROPERTY = "cc_virtual_coms.camera.pixelBudget";
 
     /**
+     * Minimum spacing between any two camera captures. Ten captures per second keeps the extra
+     * world render from causing visible frame-time spikes while still looking smooth.
+     */
+    public static final long CAPTURE_INTERVAL_NANOS = 100_000_000L;
+
+    /**
      * Minimum spacing between main-target captures. Each one forces the player's view to be rendered
      * twice, so this is deliberately far below the display frame rate (10 captures per second).
      */
@@ -66,6 +72,10 @@ public final class CameraCapturePipeline {
 
     private final Map<Long, Session> sessions = new LinkedHashMap<>();
     private final OffscreenViewRenderer offscreen = new OffscreenViewRenderer();
+    private final FrameBackup frameBackup = new FrameBackup();
+
+    @Nullable
+    private CameraOverride override;
 
     private long budgetWindowStartNanos;
     private long budgetPixelsUsed;
@@ -80,6 +90,7 @@ public final class CameraCapturePipeline {
     private long lastReadbackNanos;
     private long lastCaptureNanos;
     private boolean mainTargetFlickerLogged;
+    private boolean mainFrameLogged;
 
     private CameraCapturePipeline() {
     }
@@ -94,6 +105,10 @@ public final class CameraCapturePipeline {
         OFFSCREEN,
         MAIN_TARGET,
         PLACEHOLDER
+    }
+
+    /** A camera transform applied to the real camera for exactly one frame. */
+    public record CameraOverride(Vec3 position, float yaw, float pitch) {
     }
 
     /** One capture picked for the current frame. */
@@ -174,10 +189,13 @@ public final class CameraCapturePipeline {
      */
     public void captureFrame() {
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.level == null) {
+        if (minecraft.level == null || minecraft.screen != null) {
             return;
         }
         long now = System.nanoTime();
+        if (now - this.lastCaptureNanos < CAPTURE_INTERVAL_NANOS) {
+            return;
+        }
         CapturedCamera best = null;
         Session bestSession = null;
         Set<Long> alive = new HashSet<>();
@@ -219,8 +237,16 @@ public final class CameraCapturePipeline {
             }
             return;
         }
-        boolean issued = this.captureOffscreen(minecraft, best, bestSession,
-                resolution.width(), resolution.height());
+        this.frameBackup.save(minecraft);
+        boolean issued;
+        try {
+            issued = this.captureOffscreen(minecraft, best, bestSession,
+                    resolution.width(), resolution.height());
+        } finally {
+            // The capture may write a few passes into the main target (LevelRenderer binds it for
+            // entities/weather); put the player's frame back before the buffer swap.
+            this.frameBackup.restore(minecraft);
+        }
         if (issued) {
             bestSession.lastCaptureNanos = now;
             bestSession.pendingCaptureNanos = now;
@@ -275,6 +301,7 @@ public final class CameraCapturePipeline {
         }
         this.sessions.clear();
         this.offscreen.close();
+        this.frameBackup.reset();
         this.budgetPixelsUsed = 0L;
         this.budgetWindowStartNanos = 0L;
     }
@@ -328,17 +355,60 @@ public final class CameraCapturePipeline {
             session.detail = "skipped: no camera pose";
             return false;
         }
-        this.offscreen.ensureSize(width, height);
-        if (!this.offscreen.render(minecraft.level, resolved.rotation(),
-                resolved.pose().x(), resolved.pose().y(), resolved.pose().z(),
-                DEFAULT_FOV_DEGREES, CameraCaptureRuntime.get().partialTick())) {
-            session.detail = "skipped: off-screen render unavailable";
+        // Re-render the whole frame through GameRenderer so Sodium/Iris/Sable set themselves up
+        // exactly as for a normal frame, but with the real camera moved to the capture pose. The
+        // caller has already saved the player's finished frame and will restore it before the swap.
+        boolean previousHand = false;
+        Object handAccess = minecraft.gameRenderer;
+        if (handAccess instanceof com.ccvirtualcoms.mixin.client.GameRendererAccess access) {
+            previousHand = access.ccvc$isRenderHand();
+            access.ccvc$setRenderHand(false);
+        }
+        net.minecraft.world.phys.HitResult previousHit = minecraft.hitResult;
+        this.override = new CameraOverride(
+                new Vec3(resolved.pose().x(), resolved.pose().y(), resolved.pose().z()),
+                resolved.pose().yaw(), resolved.pose().pitch());
+        boolean rendered;
+        try {
+            // The camera override is applied at the end of Camera#setup inside this call.
+            minecraft.hitResult = null;
+            minecraft.gameRenderer.renderLevel(minecraft.getTimer());
+            rendered = true;
+            if (!this.mainFrameLogged) {
+                this.mainFrameLogged = true;
+                CCVirtualComs.LOGGER.info("[camera] main-frame capture rendered; screen={} mainTarget={}x{}",
+                        minecraft.screen == null ? "none" : minecraft.screen.getClass().getSimpleName(),
+                        minecraft.getMainRenderTarget().width,
+                        minecraft.getMainRenderTarget().height);
+            }
+        } catch (RuntimeException failure) {
+            session.detail = "skipped: main-frame render failed: " + failure;
+            rendered = false;
+            CCVirtualComs.LOGGER.warn("[camera] main-frame render failed: {}", failure.toString());
+        } finally {
+            this.override = null;
+            minecraft.hitResult = previousHit;
+            if (handAccess instanceof com.ccvirtualcoms.mixin.client.GameRendererAccess access) {
+                access.ccvc$setRenderHand(previousHand);
+            }
+        }
+        if (!rendered) {
+            return false;
+        }
+        ReadbackTarget target = session.readbackTarget(width, height);
+        if (!target.blitFrom(minecraft.getMainRenderTarget())) {
+            session.detail = "skipped: could not copy the main frame";
             return false;
         }
         PboFrameReader reader = session.reader(width, height);
-        session.path = CapturePath.OFFSCREEN;
-        session.detail = "off-screen capture (no shader pipeline)";
-        return reader.requestFramebufferRead(this.offscreen.frameBufferId());
+        session.path = CapturePath.MAIN_TARGET;
+        session.detail = "camera frame rendered in the main target; player frame restored";
+        return reader.requestFramebufferRead(target.frameBufferId());
+    }
+
+    /** Camera override for the current capture frame, polled by {@code CameraCaptureMixin}. */
+    public @Nullable CameraOverride cameraOverride() {
+        return this.override;
     }
 
     private CapturePath resolvePath(CapturedCamera camera, Session session, CameraConfig config) {

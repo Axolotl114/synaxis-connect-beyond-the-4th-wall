@@ -152,9 +152,9 @@ public class CameraTransmitterScreen extends Screen {
         if (minecraft.level == null) {
             return null;
         }
-        return minecraft.level.getBlockEntity(this.pos) instanceof CameraTransmitterBlockEntity camera
-                ? camera
-                : null;
+        // Must go through the locator: a camera on a Sable sub-level lives in a plot chunk, not in
+        // the main level's block entity storage.
+        return com.ccvirtualcoms.content.camera.CameraLocator.find(minecraft.level, this.pos);
     }
 
     private void adopt(CameraConfig server) {
