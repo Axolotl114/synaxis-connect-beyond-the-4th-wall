@@ -52,7 +52,7 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
     public void render(CameraTransmitterBlockEntity camera, float partialTick, PoseStack pose,
                        MultiBufferSource buffers, int packedLight, int packedOverlay) {
         Minecraft minecraft = Minecraft.getInstance();
-        int packedLight = net.minecraft.client.renderer.LightTexture.pack(
+        int light = net.minecraft.client.renderer.LightTexture.pack(
                 minecraft.level == null ? 0 : minecraft.level.getBrightness(
                         net.minecraft.world.level.LightLayer.BLOCK, camera.getBlockPos()),
                 minecraft.level == null ? 15 : Math.max(
@@ -77,21 +77,21 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
         // Local yaw relative to the facing already applied above (model front = north/-Z).
         pose.pushPose();
         pivotRotate(pose, Axis.YP, (float) (facing.toYRot() - yaw + 180.0D), 8.0D, YAW_PIVOT, 8.0D);
-        draw("yaw", pose, buffers, state, packedLight, packedOverlay);
+        draw("yaw", pose, buffers, state, light, packedOverlay);
 
         // Pitch: model +X looks up, Minecraft pitch positive looks down.
         pose.pushPose();
         pivotRotate(pose, Axis.XP, (float) -pitch, 8.0D, CAMERA_PIVOT, 8.0D);
-        draw("pitch", pose, buffers, state, packedLight, packedOverlay);
-        draw("status_led", pose, buffers, state, packedLight, packedOverlay);
+        draw("pitch", pose, buffers, state, light, packedOverlay);
+        draw("status_led", pose, buffers, state, light, packedOverlay);
         if (camera.clientStatus() == CameraStreamStatus.STREAMING
                 && Math.floorMod(minecraft.level.getGameTime(), 20L) < 10L) {
-            draw("status_led_on", pose, buffers, state, packedLight, packedOverlay);
+            draw("status_led_on", pose, buffers, state, light, packedOverlay);
         }
 
         pose.pushPose();
         pivotRotate(pose, Axis.ZP, (float) -roll, 8.0D, CAMERA_PIVOT, 8.0D);
-        draw("roll", pose, buffers, state, packedLight, packedOverlay);
+        draw("roll", pose, buffers, state, light, packedOverlay);
         pose.popPose();
 
         pose.popPose();
@@ -129,11 +129,11 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
         VertexConsumer consumer = buffers.getBuffer(RenderType.cutout());
         RandomSource random = RandomSource.create(42L);
         for (BakedQuad quad : model.getQuads(state, null, random)) {
-            consumer.putBulkData(pose.last(), quad, 1.0F, 1.0F, 1.0F, 1.0F, packedLight, packedOverlay);
+            consumer.putBulkData(pose.last(), quad, 1.0F, 1.0F, 1.0F, 1.0F, light, packedOverlay);
         }
         for (Direction direction : Direction.values()) {
             for (BakedQuad quad : model.getQuads(state, direction, random)) {
-                consumer.putBulkData(pose.last(), quad, 1.0F, 1.0F, 1.0F, 1.0F, packedLight, packedOverlay);
+                consumer.putBulkData(pose.last(), quad, 1.0F, 1.0F, 1.0F, 1.0F, light, packedOverlay);
             }
         }
     }
