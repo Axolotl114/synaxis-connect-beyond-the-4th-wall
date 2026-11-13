@@ -75,6 +75,8 @@ public record CameraConfigPayload(BlockPos pos, CameraConfig config) implements 
             LOGGER.info("[camera] received config: fov={} fps={} current.fov={}",
                     this.config.fov(), this.config.fps(), camera.config().fov());
             String error = camera.applyConfiguration(this.config);
+            LOGGER.info("[camera] config applied: requested.fov={} now.fov={} error={}",
+                    this.config.fov(), camera.config().fov(), error);
             if (error != null) {
                 LOGGER.debug("Rejected camera configuration from {}: {}",
                         player.getGameProfile().getName(), error);
