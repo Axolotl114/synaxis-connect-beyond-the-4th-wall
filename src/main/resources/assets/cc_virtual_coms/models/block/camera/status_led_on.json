@@ -1,0 +1,80 @@
+{
+  "ambientocclusion": false,
+  "textures": {
+    "0": "cc_virtual_coms:block/camera_atlas",
+    "particle": "cc_virtual_coms:block/camera_atlas"
+  },
+  "elements": [
+    {
+      "name": "red_status_emissive_overlay",
+      "from": [
+        7.23,
+        14.49,
+        7.23
+      ],
+      "to": [
+        8.77,
+        15.51,
+        8.77
+      ],
+      "shade": false,
+      "light_emission": 15,
+      "faces": {
+        "north": {
+          "uv": [
+            8.125,
+            4.125,
+            11.875,
+            7.875
+          ],
+          "texture": "#0"
+        },
+        "east": {
+          "uv": [
+            8.125,
+            4.125,
+            11.875,
+            7.875
+          ],
+          "texture": "#0"
+        },
+        "south": {
+          "uv": [
+            8.125,
+            4.125,
+            11.875,
+            7.875
+          ],
+          "texture": "#0"
+        },
+        "west": {
+          "uv": [
+            8.125,
+            4.125,
+            11.875,
+            7.875
+          ],
+          "texture": "#0"
+        },
+        "up": {
+          "uv": [
+            8.125,
+            4.125,
+            11.875,
+            7.875
+          ],
+          "texture": "#0"
+        },
+        "down": {
+          "uv": [
+            8.125,
+            4.125,
+            11.875,
+            7.875
+          ],
+          "texture": "#0"
+        }
+      }
+    }
+  ]
+}

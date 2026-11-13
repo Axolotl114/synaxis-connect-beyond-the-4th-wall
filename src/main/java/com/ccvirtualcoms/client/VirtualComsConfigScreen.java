@@ -44,12 +44,12 @@ public class VirtualComsConfigScreen extends Screen {
     private static final int VALUE_COLUMN_X = 312;
     private static final int VALUE_COLUMN_WIDTH = 112;
 
-    private static final int COLOR_PANEL = 0xE6101010;
-    private static final int COLOR_BORDER = 0xFF5A5A5A;
-    private static final int COLOR_HEADER = 0xFFFFD479;
-    private static final int COLOR_TEXT = 0xFFE0E0E0;
-    private static final int COLOR_MUTED = 0xFF9A9A9A;
-    private static final int COLOR_VALUE = 0xFF7FE08A;
+    private static final int COLOR_PANEL = 0xF23C3C44;
+    private static final int COLOR_BORDER = 0xFFC8C8D0;
+    private static final int COLOR_HEADER = 0xFFFFFFFF;
+    private static final int COLOR_TEXT = 0xFFF2F2F5;
+    private static final int COLOR_MUTED = 0xFFC2C2CA;
+    private static final int COLOR_VALUE = 0xFFB9E8C4;
 
     /** Explains what the direction toggle actually controls, since it no longer gates read/write. */
     private static final Tooltip DIRECTION_TOOLTIP =
