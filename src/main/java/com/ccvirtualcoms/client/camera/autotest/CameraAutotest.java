@@ -204,6 +204,7 @@ public final class CameraAutotest {
         }
         CCVirtualComs.LOGGER.info("[camera-autotest] found camera at {} ({}); opening GUI",
                 camera.pos(), camera.describe());
+        makeCreative(minecraft);
         normalizeConfigurations();
         var clientCamera = com.ccvirtualcoms.client.CameraClientHooks.cameraAt(camera.pos());
         if (clientCamera != null) {
@@ -283,6 +284,19 @@ public final class CameraAutotest {
                 instanceof com.ccvirtualcoms.content.camera.CameraTransmitterBlockEntity) {
             PacketDistributor.sendToServer(new CameraConfigPayload(subject.pos(), originalConfig));
             CCVirtualComs.LOGGER.info("[camera-autotest] restored original configuration");
+        }
+    }
+
+    /** Puts the local test player into creative so building test rigs is not a survival chore. */
+    private static void makeCreative(Minecraft minecraft) {
+        var server = minecraft.getSingleplayerServer();
+        if (server == null || minecraft.player == null) {
+            return;
+        }
+        var player = server.getPlayerList().getPlayer(minecraft.player.getUUID());
+        if (player != null && !player.isCreative()) {
+            player.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
+            CCVirtualComs.LOGGER.info("[camera-autotest] switched local test player to creative");
         }
     }
 

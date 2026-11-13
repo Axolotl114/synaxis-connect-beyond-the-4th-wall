@@ -169,7 +169,10 @@ public final class CapturedCamera {
             this.dirty = true;
         }
 
-        Direction facing = level.getBlockState(this.pos)
+        // Use the block entity's own state: for a Sable sub-level camera the main level's
+        // getBlockState(pos) is air (the block lives in a plot chunk), which would fall back to
+        // NORTH and place the lens on the wrong face.
+        Direction facing = camera.getBlockState()
                 .getOptionalValue(CameraTransmitterBlock.FACING)
                 .orElse(Direction.NORTH);
         this.resolvedPose = CameraPoseResolver.resolve(level, this.pos, facing,

@@ -23,10 +23,17 @@ public final class FrameBackup {
     private TextureTarget backup;
     private int width = -1;
     private int height = -1;
+    private boolean hasFrame;
+
+    /** {@code true} when a complete player frame has been saved. */
+    public boolean hasFrame() {
+        return this.hasFrame;
+    }
 
     /** Copies the current main render target into the backup texture. */
     public void save(Minecraft minecraft) {
         RenderSystem.assertOnRenderThread();
+        this.hasFrame = false;
         RenderTarget main = minecraft.getMainRenderTarget();
         if (main == null || main.frameBufferId < 0) {
             return;
@@ -36,6 +43,7 @@ public final class FrameBackup {
             return;
         }
         blit(main, this.backup);
+        this.hasFrame = true;
     }
 
     /** Copies the saved frame back into the main render target. */
@@ -62,6 +70,7 @@ public final class FrameBackup {
         }
         this.width = -1;
         this.height = -1;
+        this.hasFrame = false;
     }
 
     private boolean sized(int frameWidth, int frameHeight) {

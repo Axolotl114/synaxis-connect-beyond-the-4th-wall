@@ -437,14 +437,14 @@ public class CameraTransmitterScreen extends Screen {
                 Tooltip.create(Component.translatable("cc_virtual_coms.camera.tooltip.fps")));
 
         this.addToggle(4, "cc_virtual_coms.camera.field.color",
-                this.config::color,
+                () -> this.config.color(),
                 () -> Component.translatable("cc_virtual_coms.camera.option.color.color"),
                 () -> Component.translatable("cc_virtual_coms.camera.option.color.mono"),
                 () -> this.markChanged(this.config.withColor(!this.config.color())),
                 Tooltip.create(Component.translatable("cc_virtual_coms.camera.tooltip.color")));
 
         this.addToggle(5, "cc_virtual_coms.camera.field.night_vision",
-                this.config::nightVision,
+                () -> this.config.nightVision(),
                 () -> Component.translatable("cc_virtual_coms.camera.option.on"),
                 () -> Component.translatable("cc_virtual_coms.camera.option.off"),
                 () -> this.markChanged(this.config.withNightVision(!this.config.nightVision())),
@@ -528,7 +528,7 @@ public class CameraTransmitterScreen extends Screen {
 
     private void buildTriggerPage() {
         this.addToggle(0, "cc_virtual_coms.camera.field.trigger_source",
-                this.config::redstoneControl,
+                () -> this.config.redstoneControl(),
                 () -> Component.translatable("cc_virtual_coms.camera.option.trigger.circuit"),
                 () -> Component.translatable("cc_virtual_coms.camera.option.trigger.manual"),
                 () -> this.markChanged(this.config.withRedstoneControl(
@@ -536,7 +536,7 @@ public class CameraTransmitterScreen extends Screen {
                 priorityTooltip("cc_virtual_coms.camera.tooltip.trigger_source"));
 
         this.addToggle(1, "cc_virtual_coms.camera.field.hold",
-                this.config::holdOn,
+                () -> this.config.holdOn(),
                 () -> Component.translatable("cc_virtual_coms.camera.option.hold.on"),
                 () -> Component.translatable("cc_virtual_coms.camera.option.hold.off"),
                 () -> this.markChanged(this.config.withHoldOn(!this.config.holdOn())),
