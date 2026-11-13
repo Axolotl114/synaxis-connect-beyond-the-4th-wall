@@ -133,6 +133,9 @@ public class CameraTransmitterScreen extends Screen {
     private String heightDraft = "";
     private String thresholdDraft = "";
     private String fovDraft = "";
+    private String yawDraft = "0";
+    private String pitchDraft = "0";
+    private String rollDraft = "0";
     private String offsetXDraft = "";
     private String offsetYDraft = "";
     private String offsetZDraft = "";
@@ -502,6 +505,24 @@ public class CameraTransmitterScreen extends Screen {
         this.markChanged(this.config.withResolution(CameraResolution.sanitized(width, height)));
     }
 
+    private void onEulerChanged(int axis, String value) {
+        if (axis == 0) {
+            this.yawDraft = value;
+        } else if (axis == 1) {
+            this.pitchDraft = value;
+        } else {
+            this.rollDraft = value;
+        }
+        if (value.isEmpty()) {
+            return;
+        }
+        double yaw = this.parseOrDefault(this.yawDraft, 0);
+        double pitch = this.parseOrDefault(this.pitchDraft, 0);
+        double roll = this.parseOrDefault(this.rollDraft, 0);
+        net.neoforged.neoforge.network.PacketDistributor.sendToServer(
+                new com.ccvirtualcoms.net.CameraEulerPayload(this.pos, yaw, pitch, roll));
+    }
+
     private void onFovChanged(String value) {
         this.fovDraft = value;
         if (value.isEmpty()) {
@@ -509,6 +530,9 @@ public class CameraTransmitterScreen extends Screen {
         }
         int fov = this.parseOrDefault(value, this.config.fov());
         this.markChanged(this.config.withFov(fov));
+        this.flush();
+        // FOV is a single value the user expects to see applied immediately; bypass the debounce.
+        this.flush();
     }
 
     private void onHeightChanged(String value) {
@@ -622,19 +646,29 @@ public class CameraTransmitterScreen extends Screen {
                 Tooltip.create(Component.translatable(
                         "cc_virtual_coms.camera.tooltip.axis_mode")));
 
-        this.addReadonly(3, "cc_virtual_coms.camera.field.euler", this::eulerLabel,
-                () -> Component.translatable("cc_virtual_coms.camera.tooltip.euler"));
+        this.addRowLabel(3, "Yaw");
+        this.addEditor(3, this.yawDraft, 0, 60, 7, SIGNED_NUMBER,
+                value -> this.onEulerChanged(0, value),
+                Tooltip.create(Component.translatable("cc_virtual_coms.camera.tooltip.euler")));
+        this.addRowLabel(4, "Pitch");
+        this.addEditor(4, this.pitchDraft, 0, 60, 7, SIGNED_NUMBER,
+                value -> this.onEulerChanged(1, value),
+                Tooltip.create(Component.translatable("cc_virtual_coms.camera.tooltip.euler")));
+        this.addRowLabel(5, "Roll");
+        this.addEditor(5, this.rollDraft, 0, 60, 7, SIGNED_NUMBER,
+                value -> this.onEulerChanged(2, value),
+                Tooltip.create(Component.translatable("cc_virtual_coms.camera.tooltip.euler")));
 
-        this.addRowLabel(4, "cc_virtual_coms.camera.field.offset_x");
-        this.addEditor(4, this.offsetXDraft, 0, CameraGuiStyle.CONTROL_WIDTH, 7, SIGNED_NUMBER,
+        this.addRowLabel(6, "cc_virtual_coms.camera.field.offset_x");
+        this.addEditor(6, this.offsetXDraft, 0, CameraGuiStyle.CONTROL_WIDTH, 7, SIGNED_NUMBER,
                 value -> this.onOffsetChanged(0, value),
                 Tooltip.create(Component.translatable("cc_virtual_coms.camera.tooltip.offset")));
-        this.addRowLabel(5, "cc_virtual_coms.camera.field.offset_y");
-        this.addEditor(5, this.offsetYDraft, 0, CameraGuiStyle.CONTROL_WIDTH, 7, SIGNED_NUMBER,
+        this.addRowLabel(7, "cc_virtual_coms.camera.field.offset_y");
+        this.addEditor(7, this.offsetYDraft, 0, CameraGuiStyle.CONTROL_WIDTH, 7, SIGNED_NUMBER,
                 value -> this.onOffsetChanged(1, value),
                 Tooltip.create(Component.translatable("cc_virtual_coms.camera.tooltip.offset")));
-        this.addRowLabel(6, "cc_virtual_coms.camera.field.offset_z");
-        this.addEditor(6, this.offsetZDraft, 0, CameraGuiStyle.CONTROL_WIDTH, 7, SIGNED_NUMBER,
+        this.addRowLabel(8, "cc_virtual_coms.camera.field.offset_z");
+        this.addEditor(8, this.offsetZDraft, 0, CameraGuiStyle.CONTROL_WIDTH, 7, SIGNED_NUMBER,
                 value -> this.onOffsetChanged(2, value),
                 Tooltip.create(Component.translatable("cc_virtual_coms.camera.tooltip.offset")));
     }

@@ -4,6 +4,7 @@ import com.ccvirtualcoms.content.CCVirtualComsRegistry;
 import com.ccvirtualcoms.content.VirtualComsBlockEntity;
 import com.ccvirtualcoms.content.camera.CameraTransmitterBlockEntity;
 import com.ccvirtualcoms.net.CameraConfigPayload;
+import com.ccvirtualcoms.net.CameraEulerPayload;
 import com.ccvirtualcoms.net.CameraStatusPayload;
 import com.ccvirtualcoms.net.ConfigPayload;
 import com.ccvirtualcoms.net.StatusPayload;
@@ -116,6 +117,8 @@ public final class CCVirtualComs {
         registrar.playToClient(StatusPayload.TYPE, StatusPayload.STREAM_CODEC,
                 (payload, context) -> payload.handle(context));
         registrar.playToServer(CameraConfigPayload.TYPE, CameraConfigPayload.STREAM_CODEC,
+                (payload, context) -> payload.handle(context));
+        registrar.playToServer(CameraEulerPayload.TYPE, CameraEulerPayload.STREAM_CODEC,
                 (payload, context) -> payload.handle(context));
         registrar.playToClient(CameraStatusPayload.TYPE, CameraStatusPayload.STREAM_CODEC,
                 (payload, context) -> payload.handle(context));
