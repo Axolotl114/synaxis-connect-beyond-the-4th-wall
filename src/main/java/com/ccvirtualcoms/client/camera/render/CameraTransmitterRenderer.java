@@ -73,6 +73,36 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
         double yaw = camera.eulerAngles()[0];
         double pitch = Math.max(-60.0D, Math.min(60.0D, camera.eulerAngles()[1]));
         double roll = camera.eulerAngles()[2];
+        if (camera.config() != null) {
+            dev.ryanhcode.sable.companion.SubLevelAccess subLevel =
+                    com.ccvirtualcoms.content.camera.CameraLocator.containingSubLevel(
+                            minecraft.level, camera.getBlockPos());
+            if (subLevel instanceof dev.ryanhcode.sable.sublevel.ClientSubLevel clientSubLevel) {
+                org.joml.Quaterniond subRotation = new org.joml.Quaterniond(
+                        clientSubLevel.renderPose(partialTick).orientation());
+                org.joml.Quaterniond local = com.ccvirtualcoms.client.camera.capture.CameraTransformMath
+                        .cameraRotation((float) yaw, (float) pitch, (float) roll);
+                float[] absolute = com.ccvirtualcoms.client.camera.capture.CameraTransformMath
+                        .eulerFromRotation(local, new float[3]);
+                float[] follow = com.ccvirtualcoms.client.camera.capture.CameraTransformMath
+                        .eulerFromRotation(new org.joml.Quaterniond(subRotation).mul(local), new float[3]);
+                float useYaw = camera.config().yawMode() == com.ccvirtualcoms.camera.CameraAxisMode.WORLD_STABLE
+                        ? absolute[0] : follow[0];
+                float usePitch = camera.config().pitchMode() == com.ccvirtualcoms.camera.CameraAxisMode.WORLD_STABLE
+                        ? absolute[1] : follow[1];
+                float useRoll = camera.config().rollMode() == com.ccvirtualcoms.camera.CameraAxisMode.WORLD_STABLE
+                        ? absolute[2] : follow[2];
+                org.joml.Quaterniond worldRotation = com.ccvirtualcoms.client.camera.capture.CameraTransformMath
+                        .cameraRotation(useYaw, usePitch, useRoll);
+                org.joml.Quaterniond modelRotation = new org.joml.Quaterniond(subRotation)
+                        .invert().mul(worldRotation);
+                float[] display = com.ccvirtualcoms.client.camera.capture.CameraTransformMath
+                        .eulerFromRotation(modelRotation, new float[3]);
+                yaw = display[0];
+                pitch = Math.max(-60.0D, Math.min(60.0D, display[1]));
+                roll = display[2];
+            }
+        }
 
         // Local yaw relative to the facing already applied above (model front = north/-Z).
         pose.pushPose();

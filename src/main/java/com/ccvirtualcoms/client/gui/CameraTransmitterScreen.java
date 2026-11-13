@@ -198,6 +198,13 @@ public class CameraTransmitterScreen extends Screen {
     @Override
     protected void init() {
         super.init();
+        var initialCamera = this.camera();
+        if (initialCamera != null) {
+            double[] euler = initialCamera.eulerAngles();
+            this.yawDraft = Integer.toString((int) Math.round(euler[0]));
+            this.pitchDraft = Integer.toString((int) Math.round(euler[1]));
+            this.rollDraft = Integer.toString((int) Math.round(euler[2]));
+        }
         this.left = Math.max(2, (this.width - CameraGuiStyle.PANEL_WIDTH) / 2);
         this.top = Math.max(2, (this.height - CameraGuiStyle.PANEL_HEIGHT) / 2);
 
