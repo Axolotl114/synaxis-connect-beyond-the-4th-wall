@@ -1,8 +1,6 @@
 {
   "itemGroup.cc_virtual_coms": "Synaxis: Connect beyond the 4th Wall",
-
   "block.cc_virtual_coms.virtual_coms_board": "Virtual Serial Port Board",
-
   "cc_virtual_coms.screen.title": "Virtual Serial Port",
   "cc_virtual_coms.screen.com": "Serial port id",
   "cc_virtual_coms.screen.apply": "Apply",
@@ -26,7 +24,9 @@
   "cc_virtual_coms.screen.connected": "connected (%s client(s))",
   "cc_virtual_coms.screen.disconnected": "no client connected",
   "cc_virtual_coms.screen.listenerDown": "listener not running",
-
   "cc_virtual_coms.tooltip.hint": "Right-click with an empty hand to configure",
-  "cc_virtual_coms.tooltip.com": "Serial port: %s"
+  "cc_virtual_coms.tooltip.com": "Serial port: %s",
+  "block.cc_virtual_coms.camera_transmitter": "Camera Transmitter",
+  "cc_virtual_coms.camera.title": "Camera Transmitter",
+  "cc_virtual_coms.camera.tooltip.hint": "Right-click with an empty hand to configure"
 }

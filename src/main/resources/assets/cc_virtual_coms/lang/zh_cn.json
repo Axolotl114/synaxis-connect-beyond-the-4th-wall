@@ -1,8 +1,6 @@
 {
   "itemGroup.cc_virtual_coms": "Synaxis: Connect beyond the 4th Wall",
-
   "block.cc_virtual_coms.virtual_coms_board": "虚拟串口电路板",
-
   "cc_virtual_coms.screen.title": "虚拟串口配置",
   "cc_virtual_coms.screen.com": "串口号",
   "cc_virtual_coms.screen.apply": "应用",
@@ -26,7 +24,9 @@
   "cc_virtual_coms.screen.connected": "已连接（%s 个客户端）",
   "cc_virtual_coms.screen.disconnected": "无外部程序连接",
   "cc_virtual_coms.screen.listenerDown": "监听未启动",
-
   "cc_virtual_coms.tooltip.hint": "空手右键打开配置界面",
-  "cc_virtual_coms.tooltip.com": "串口号: %s"
+  "cc_virtual_coms.tooltip.com": "串口号: %s",
+  "block.cc_virtual_coms.camera_transmitter": "图传摄像头",
+  "cc_virtual_coms.camera.title": "图传摄像头",
+  "cc_virtual_coms.camera.tooltip.hint": "空手右键打开配置界面"
 }

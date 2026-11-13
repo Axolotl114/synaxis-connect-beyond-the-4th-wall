@@ -1,6 +1,8 @@
 package com.ccvirtualcoms.content;
 
 import com.ccvirtualcoms.CCVirtualComs;
+import com.ccvirtualcoms.content.camera.CameraTransmitterBlock;
+import com.ccvirtualcoms.content.camera.CameraTransmitterBlockEntity;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTab;
@@ -51,13 +53,35 @@ public final class CCVirtualComsRegistry {
                             .of(VirtualComsBlockEntity::new, VIRTUAL_COMS_BLOCK.get())
                             .build(null));
 
+    /** The camera transmitter: streams its view to an external virtual camera device. */
+    public static final DeferredBlock<CameraTransmitterBlock> CAMERA_TRANSMITTER_BLOCK = BLOCKS.register(
+            "camera_transmitter",
+            () -> new CameraTransmitterBlock(BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.METAL)
+                    .strength(1.5F)
+                    .sound(net.minecraft.world.level.block.SoundType.METAL)));
+
+    public static final DeferredItem<BlockItem> CAMERA_TRANSMITTER_ITEM = ITEMS.register(
+            "camera_transmitter",
+            () -> new BlockItem(CAMERA_TRANSMITTER_BLOCK.get(), new Item.Properties()));
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<CameraTransmitterBlockEntity>>
+            CAMERA_TRANSMITTER_BE = BLOCK_ENTITY_TYPES.register(
+                    "camera_transmitter",
+                    () -> BlockEntityType.Builder
+                            .of(CameraTransmitterBlockEntity::new, CAMERA_TRANSMITTER_BLOCK.get())
+                            .build(null));
+
     /** Dedicated creative tab holding every item this mod adds. */
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> CREATIVE_TAB = CREATIVE_TABS.register(
             "main",
             () -> CreativeModeTab.builder()
                     .title(net.minecraft.network.chat.Component.translatable("itemGroup." + CCVirtualComs.MOD_ID))
                     .icon(() -> VIRTUAL_COMS_ITEM.get().getDefaultInstance())
-                    .displayItems((parameters, output) -> output.accept(VIRTUAL_COMS_ITEM.get()))
+                    .displayItems((parameters, output) -> {
+                        output.accept(VIRTUAL_COMS_ITEM.get());
+                        output.accept(CAMERA_TRANSMITTER_ITEM.get());
+                    })
                     .build());
 
     private CCVirtualComsRegistry() {

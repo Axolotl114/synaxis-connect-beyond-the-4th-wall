@@ -2,9 +2,13 @@ package com.ccvirtualcoms;
 
 import com.ccvirtualcoms.content.CCVirtualComsRegistry;
 import com.ccvirtualcoms.content.VirtualComsBlockEntity;
+import com.ccvirtualcoms.content.camera.CameraTransmitterBlockEntity;
+import com.ccvirtualcoms.net.CameraConfigPayload;
+import com.ccvirtualcoms.net.CameraStatusPayload;
 import com.ccvirtualcoms.net.ConfigPayload;
 import com.ccvirtualcoms.net.StatusPayload;
 import com.ccvirtualcoms.net.VirtualComsServer;
+import com.ccvirtualcoms.synaxis.CameraTransmitterComponent;
 import com.ccvirtualcoms.synaxis.VirtualComsComponent;
 import com.verr1.synaxis.foundation.cimulink.game.body.PlantPortProviders;
 import com.verr1.synaxis.foundation.cimulink.game.runtime.CimulinkWorldRuntimes;
@@ -69,12 +73,23 @@ public final class CCVirtualComs {
             CimulinkWorldRuntimes.componentRegistry().register(VirtualComsComponent.INSTANCE);
             LOGGER.info("Registered Cimulink component type {}", VirtualComsComponent.ID);
 
+            CimulinkWorldRuntimes.componentRegistry().register(CameraTransmitterComponent.INSTANCE);
+            LOGGER.info("Registered Cimulink component type {}", CameraTransmitterComponent.ID);
+
             // Let Synaxis reach the board from inside a circuit graph.
             PlantPortProviders.register(
                     CCVirtualComsRegistry.VIRTUAL_COMS_BE.get(),
                     (blockEntity, endpointId, requestedName) ->
                             blockEntity instanceof VirtualComsBlockEntity board
                                     ? Optional.of(board.createPlantPort(endpointId, requestedName))
+                                    : Optional.empty());
+
+            // Same bridge for the camera transmitter's enable/streaming/euler_angle terminals.
+            PlantPortProviders.register(
+                    CCVirtualComsRegistry.CAMERA_TRANSMITTER_BE.get(),
+                    (blockEntity, endpointId, requestedName) ->
+                            blockEntity instanceof CameraTransmitterBlockEntity camera
+                                    ? Optional.of(camera.createPlantPort(endpointId, requestedName))
                                     : Optional.empty());
 
             // Start listening for out-of-game programs as soon as the game is up.
@@ -99,6 +114,10 @@ public final class CCVirtualComs {
         registrar.playToServer(ConfigPayload.TYPE, ConfigPayload.STREAM_CODEC,
                 (payload, context) -> payload.handle(context));
         registrar.playToClient(StatusPayload.TYPE, StatusPayload.STREAM_CODEC,
+                (payload, context) -> payload.handle(context));
+        registrar.playToServer(CameraConfigPayload.TYPE, CameraConfigPayload.STREAM_CODEC,
+                (payload, context) -> payload.handle(context));
+        registrar.playToClient(CameraStatusPayload.TYPE, CameraStatusPayload.STREAM_CODEC,
                 (payload, context) -> payload.handle(context));
     }
 
