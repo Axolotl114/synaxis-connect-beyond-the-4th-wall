@@ -1,4 +1,7 @@
-# CC Synaxis Virtual Coms
+# Synaxis: Connect beyond the 4th Wall
+
+> The internal modId stays `cc_virtual_coms` for save and script compatibility;
+> the old display name "CC Synaxis Virtual Coms" is kept only as history.
 
 Virtual serial ports that bridge Minecraft circuits, CC:Tweaked computers and
 out-of-game Python programs over a local TCP socket.
@@ -20,7 +23,7 @@ out-of-game Python programs over a local TCP socket.
 ### Virtual Serial Port Board `virtual_coms_board`
 
 The only block this mod adds (which is also its item). Found in its own
-creative tab.
+"Synaxis: Connect beyond the 4th Wall" creative tab.
 
 - **Placement**: mounts on the face you click, like other Synaxis circuit
   boards (`facing` has all six directions).

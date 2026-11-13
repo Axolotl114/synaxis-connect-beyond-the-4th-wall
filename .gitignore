@@ -3,6 +3,12 @@
 build/
 run/
 
+# NeoFormRuntime / ModDevGradle intermediate cache (created by runData/runClient)
+/.build/
+
+# Project-local Gradle cache created when the sandbox redirects the project cache.
+/.gradle-project/
+
 # IDE
 .idea/
 *.iml
@@ -23,7 +29,7 @@ __pycache__/
 venv/
 
 # Logs
-_*.log
+*.log
 
 # ===========================================================================
 # Everything below is deliberately NOT published.
@@ -65,3 +71,19 @@ _*.log
 # Large local artefacts
 *.pdf
 错误报告-*.zip
+
+# Unrelated QQ/NapCat tooling that appeared in this folder (~160 MB). Not part
+# of the mod; ignored so a careless `git add -A` cannot publish it.
+/napcat/
+/NapCat.Shell/
+/qq_terminal/
+
+# Agent-team working material (research notes, extracted reference assets).
+/.research/
+
+# Local rollback snapshots of previous project versions (not published).
+/_backups/
+
+# Relocated Gradle user home: the DSH file sandbox cannot write to
+# %USERPROFILE%\.gradle, so builds redirect it into the workspace.
+/.gradle-home/

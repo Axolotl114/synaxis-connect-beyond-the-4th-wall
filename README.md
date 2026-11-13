@@ -1,4 +1,6 @@
-# CC Synaxis Virtual Coms
+# Synaxis: Connect beyond the 4th Wall
+
+> 内部 modId 保持 `cc_virtual_coms`，存档与脚本兼容；旧显示名「CC Synaxis Virtual Coms」仅作文档历史名。
 
 把 Minecraft 电路、CC:Tweaked 电脑和游戏外的 Python 程序,通过本地 TCP 套接字连在一起。
 
@@ -22,7 +24,7 @@
 
 ### 虚拟串口电路板 `virtual_coms_board`
 
-唯一添加的方块(同时是物品),创造模式物品栏「CC Synaxis 虚拟串口」标签页中获取。
+唯一添加的方块(同时是物品),创造模式物品栏「Synaxis: Connect beyond the 4th Wall」标签页中获取。
 
 - **放置**:像 Synaxis 其他电路板一样,贴附在你点击的那个面上(`facing` 六个方向)。
 - **配置界面**:**空手右键**打开(手持任何物品右键不会打开,交互会交给物品本身,因此可以正常用 Synaxis 工具枪连线)。
