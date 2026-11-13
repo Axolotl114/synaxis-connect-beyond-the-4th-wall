@@ -93,6 +93,23 @@ public final class CameraAutotest {
         }
     }
 
+    /**
+     * Logs every tracked camera's resolved world pose once per second, including whether it sits on
+     * a Sable sub-level. Used to verify that the camera follows a moving/teleported sub-level.
+     */
+    private static void logPoses() {
+        for (CapturedCamera camera : CameraCaptureRuntime.get().cameras()) {
+            var pose = camera.pose();
+            CCVirtualComs.LOGGER.info(
+                    "[camera-autotest] pose {} sublevel={} streaming={} pos=({},{},{}) yaw={} pitch={} roll={} detail={}",
+                    camera.pos(), camera.onSubLevel(), camera.streaming(),
+                    pose == null ? 0.0D : pose.x(), pose == null ? 0.0D : pose.y(),
+                    pose == null ? 0.0D : pose.z(),
+                    pose == null ? 0.0F : pose.yaw(), pose == null ? 0.0F : pose.pitch(),
+                    pose == null ? 0.0F : pose.roll(), camera.poseDetail());
+        }
+    }
+
     private static boolean enabled() {
         if (Boolean.getBoolean(ENABLE_PROPERTY) || "1".equals(System.getenv("CCVC_AUTOTEST"))) {
             return true;
@@ -104,6 +121,9 @@ public final class CameraAutotest {
 
     private static void tick(Minecraft minecraft) {
         ticks++;
+        if (ticks % 20 == 0) {
+            logPoses();
+        }
         if (ticks < 120) {
             return;
         }
@@ -185,9 +205,9 @@ public final class CameraAutotest {
         CCVirtualComs.LOGGER.info("[camera-autotest] found camera at {} ({}); opening GUI",
                 camera.pos(), camera.describe());
         normalizeConfigurations();
-        if (minecraft.level.getBlockEntity(camera.pos())
-                instanceof com.ccvirtualcoms.content.camera.CameraTransmitterBlockEntity be) {
-            minecraft.setScreen(new CameraTransmitterScreen(be));
+        var clientCamera = com.ccvirtualcoms.client.CameraClientHooks.cameraAt(camera.pos());
+        if (clientCamera != null) {
+            minecraft.setScreen(new CameraTransmitterScreen(clientCamera));
         }
         pageIndex = 0;
         phase = 1;
@@ -267,6 +287,13 @@ public final class CameraAutotest {
     }
 
     private static CapturedCamera nearestCamera(Minecraft minecraft) {
+        // Prefer a camera on a Sable sub-level: it exercises discovery, status routing and capture
+        // for the plot-based positions, which the normal chunk sweep cannot see.
+        for (CapturedCamera camera : CameraCaptureRuntime.get().cameras()) {
+            if (camera.onSubLevel()) {
+                return camera;
+            }
+        }
         CapturedCamera best = null;
         double bestDistance = Double.MAX_VALUE;
         for (CapturedCamera camera : CameraCaptureRuntime.get().cameras()) {

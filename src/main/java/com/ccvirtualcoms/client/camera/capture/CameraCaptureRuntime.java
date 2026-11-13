@@ -2,7 +2,10 @@ package com.ccvirtualcoms.client.camera.capture;
 
 import com.ccvirtualcoms.CCVirtualComs;
 import com.ccvirtualcoms.camera.api.CameraPose;
+import com.ccvirtualcoms.content.camera.CameraLocator;
 import com.ccvirtualcoms.content.camera.CameraTransmitterBlockEntity;
+import dev.ryanhcode.sable.sublevel.SubLevel;
+import dev.ryanhcode.sable.sublevel.plot.PlotChunkHolder;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
@@ -16,6 +19,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -135,14 +139,45 @@ public final class CameraCaptureRuntime {
                 }
             }
         }
+        this.scanSubLevels(level, center, radius);
         this.scanCount++;
+    }
+
+    /**
+     * Discovers cameras inside Sable sub-levels. Their blocks live in plot chunks that are not part
+     * of the main level's chunk storage, so the normal chunk sweep cannot see them.
+     */
+    private void scanSubLevels(ClientLevel level, BlockPos center, int radius) {
+        Vec3 observer = Vec3.atCenterOf(center);
+        double maxDistance = (radius + 2) * 16.0D;
+        for (SubLevel subLevel : CameraLocator.subLevels(level)) {
+            try {
+                if (!CameraLocator.subLevelNear(level, subLevel, observer, maxDistance)) {
+                    continue;
+                }
+                for (PlotChunkHolder holder : subLevel.getPlot().getLoadedChunks()) {
+                    LevelChunk chunk = holder.getChunk();
+                    if (chunk == null) {
+                        continue;
+                    }
+                    for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
+                        if (blockEntity instanceof CameraTransmitterBlockEntity camera) {
+                            this.cameras.computeIfAbsent(camera.getBlockPos().asLong(),
+                                    key -> new CapturedCamera(camera.getBlockPos()));
+                        }
+                    }
+                }
+            } catch (RuntimeException | LinkageError failure) {
+                CCVirtualComs.LOGGER.debug("[camera] sub-level scan failed: {}", failure.toString());
+            }
+        }
     }
 
     private void refreshAll(ClientLevel level) {
         Iterator<Map.Entry<Long, CapturedCamera>> iterator = this.cameras.entrySet().iterator();
         while (iterator.hasNext()) {
             CapturedCamera captured = iterator.next().getValue();
-            BlockEntity blockEntity = level.getBlockEntity(captured.pos());
+            BlockEntity blockEntity = CameraLocator.find(level, captured.pos());
             if (!(blockEntity instanceof CameraTransmitterBlockEntity camera)
                     || camera.isRemoved()) {
                 captured.dispose();

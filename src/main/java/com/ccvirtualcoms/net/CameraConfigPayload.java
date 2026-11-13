@@ -7,6 +7,7 @@ import com.ccvirtualcoms.camera.CameraRedstoneMode;
 import com.ccvirtualcoms.camera.CameraRenderMode;
 import com.ccvirtualcoms.camera.CameraResolution;
 import com.ccvirtualcoms.camera.CameraStreamStatus;
+import com.ccvirtualcoms.content.camera.CameraLocator;
 import com.ccvirtualcoms.content.camera.CameraTransmitterBlockEntity;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.core.BlockPos;
@@ -18,6 +19,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,12 +62,12 @@ public record CameraConfigPayload(BlockPos pos, CameraConfig config) implements 
                 return;
             }
             ServerLevel level = player.serverLevel();
-            BlockEntity blockEntity = level.getBlockEntity(this.pos);
+            BlockEntity blockEntity = CameraLocator.find(level, this.pos);
             if (!(blockEntity instanceof CameraTransmitterBlockEntity camera)) {
                 return;
             }
-            if (player.distanceToSqr(this.pos.getX() + 0.5D, this.pos.getY() + 0.5D, this.pos.getZ() + 0.5D)
-                    > MAX_EDIT_DISTANCE_SQ) {
+            Vec3 worldPos = CameraLocator.worldPosition(level, this.pos);
+            if (player.distanceToSqr(worldPos) > MAX_EDIT_DISTANCE_SQ) {
                 LOGGER.debug("Ignoring camera configuration from {} - out of range",
                         player.getGameProfile().getName());
                 return;

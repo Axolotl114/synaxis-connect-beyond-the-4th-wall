@@ -1,5 +1,6 @@
 package com.ccvirtualcoms.client;
 
+import com.ccvirtualcoms.content.camera.CameraLocator;
 import com.ccvirtualcoms.content.camera.CameraTransmitterBlockEntity;
 import com.ccvirtualcoms.net.CameraStatusPayload;
 import net.minecraft.client.Minecraft;
@@ -16,13 +17,14 @@ public final class CameraStatusClientHooks {
     private CameraStatusClientHooks() {
     }
 
-    /** Applies a server status snapshot to the client-side block entity. */
+    /** Applies a server status snapshot to the client-side block entity (main level or Sable plot). */
     public static void handle(CameraStatusPayload payload) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.level == null) {
             return;
         }
-        if (minecraft.level.getBlockEntity(payload.pos()) instanceof CameraTransmitterBlockEntity camera) {
+        CameraTransmitterBlockEntity camera = CameraLocator.find(minecraft.level, payload.pos());
+        if (camera != null) {
             camera.applyStatusSnapshot(payload.config(), payload.status(), payload.deviceName(),
                     payload.streamUrl(), payload.redstoneSignal(), payload.revision(), payload.detail());
         }

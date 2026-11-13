@@ -66,6 +66,8 @@ public final class CameraCapturePipeline {
 
     private final Map<Long, Session> sessions = new LinkedHashMap<>();
     private final OffscreenViewRenderer offscreen = new OffscreenViewRenderer();
+    private final PresentGuard presentGuard = new PresentGuard();
+    private boolean mainTargetCapturedThisFrame;
 
     @Nullable
     private CaptureRequest pending;
@@ -289,6 +291,9 @@ public final class CameraCapturePipeline {
                 session.pendingCaptureNanos = request.requestedNanos();
                 this.lastCaptureNanos = request.requestedNanos();
                 mainTargetCaptured = isMainTarget;
+                if (mainTargetCaptured) {
+                    this.mainTargetCapturedThisFrame = true;
+                }
             } else {
                 session.droppedFrames++;
                 this.drops++;
@@ -308,6 +313,13 @@ public final class CameraCapturePipeline {
 
     /** Polls finished readbacks and publishes them to the cameras. */
     public void onFrameEnd() {
+        // Runs after the GUI, immediately before the buffer swap. If this frame captured the main
+        // target (camera view), put the previous player frame back so the screen never flashes.
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft != null) {
+            this.presentGuard.afterFrame(minecraft, this.mainTargetCapturedThisFrame);
+        }
+        this.mainTargetCapturedThisFrame = false;
         for (Session session : this.sessions.values()) {
             if (session.reader == null) {
                 continue;
@@ -348,6 +360,8 @@ public final class CameraCapturePipeline {
         }
         this.sessions.clear();
         this.offscreen.close();
+        this.presentGuard.reset();
+        this.mainTargetCapturedThisFrame = false;
         this.budgetPixelsUsed = 0L;
         this.budgetWindowStartNanos = 0L;
     }
@@ -439,34 +453,27 @@ public final class CameraCapturePipeline {
         boolean iris = IrisCompat.irisInstalled();
         boolean shadersActive = iris && IrisCompat.shaderPackInUse();
         CameraRenderMode mode = config.renderMode();
-        CapturePath path;
+        // Shader compatibility is intentionally not required: a shader-composed frame can only be
+        // captured by hijacking the player's main render target, which is what caused the visible
+        // flicker. The camera therefore always renders into a private off-screen target. With a
+        // shader pack active the image contains vanilla lighting instead of shader effects, but the
+        // player's view is never touched.
+        CapturePath path = CapturePath.OFFSCREEN;
         String degradation = null;
         if (shadersActive) {
-            path = CapturePath.MAIN_TARGET;
-            // The shader pipeline only presents the final image into the main render target, so
-            // capturing it requires rendering the camera view inside the player's frame. That is
-            // visible for one frame per capture while shaders are on; without shaders we avoid it.
-            if (mode == CameraRenderMode.OFF) {
-                degradation = "shader pack is active: a private target would stay black, main-target "
-                        + "capture used instead (the player view moves for one frame per capture)";
-            } else {
-                degradation = "shader pack active: main-target capture (the player view moves for one "
-                        + "frame per capture)";
-            }
+            degradation = "shader pack active: camera image uses vanilla lighting (shader effects "
+                    + "are not captured); off-screen capture keeps the player view stable";
             if (!this.mainTargetFlickerLogged) {
                 this.mainTargetFlickerLogged = true;
-                CCVirtualComs.LOGGER.warn("[camera] Shader pack active: capture uses the main render "
-                        + "target, so the player view may jump for one frame per captured frame. "
-                        + "Disable shaders if that flicker is distracting.");
+                CCVirtualComs.LOGGER.info("[camera] Shader pack is active, but capture stays "
+                        + "off-screen on purpose: no shader effects in the camera image and no "
+                        + "flicker in the player view.");
             }
-        } else {
-            path = CapturePath.OFFSCREEN;
-            if (iris) {
-                degradation = "Iris present but no shader pack is active; off-screen capture keeps "
-                        + "the player view untouched";
-            } else if (mode == CameraRenderMode.ON) {
-                degradation = "Iris is not installed, so shaders cannot be used; off-screen capture";
-            }
+        } else if (iris) {
+            degradation = "Iris present but no shader pack is active; off-screen capture keeps "
+                    + "the player view untouched";
+        } else if (mode == CameraRenderMode.ON) {
+            degradation = "Iris is not installed, so shaders cannot be used; off-screen capture";
         }
         if (path == CapturePath.MAIN_TARGET && !this.mainTargetSupported()) {
             path = CapturePath.PLACEHOLDER;
@@ -527,7 +534,7 @@ public final class CameraCapturePipeline {
         return true;
     }
 
-    private static long pixelBudget() {
+    private long pixelBudget() {
         String raw = System.getProperty(PIXEL_BUDGET_PROPERTY);
         if (raw != null) {
             try {
@@ -539,6 +546,9 @@ public final class CameraCapturePipeline {
                 // Fall through to the default.
             }
         }
-        return DEFAULT_READBACK_PIXEL_BUDGET_PER_SECOND;
+        // The default is one 640x480@30 stream. Multiple tracked cameras each need their own
+        // share, otherwise a single busy camera starves the others and their streams look offline.
+        int cameras = Math.max(1, this.sessions.size());
+        return DEFAULT_READBACK_PIXEL_BUDGET_PER_SECOND * cameras;
     }
 }

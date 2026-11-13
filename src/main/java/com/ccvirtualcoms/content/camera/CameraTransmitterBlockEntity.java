@@ -496,8 +496,14 @@ public class CameraTransmitterBlockEntity extends BlockEntity
                 this.eulerPitch,
                 this.eulerRoll,
                 this.statusDetail);
-        PacketDistributor.sendToPlayersTrackingChunk(serverLevel,
-                new ChunkPos(this.getBlockPos()), payload);
+        if (CameraLocator.inSubLevel(serverLevel, this.getBlockPos())) {
+            // Sub-level block positions are plot coordinates; no player tracks that "chunk" of the
+            // main level, so every player has to receive the snapshot (a small payload at 1 Hz).
+            PacketDistributor.sendToAllPlayers(payload);
+        } else {
+            PacketDistributor.sendToPlayersTrackingChunk(serverLevel,
+                    new ChunkPos(this.getBlockPos()), payload);
+        }
     }
 
     private void setStatus(String message) {
