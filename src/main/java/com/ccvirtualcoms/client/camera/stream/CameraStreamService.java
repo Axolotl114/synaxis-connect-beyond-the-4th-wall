@@ -139,6 +139,16 @@ public final class CameraStreamService {
     }
 
     /** {@code true} while the fallback HTTP server is listening. */
+    /**
+     * Number of live viewers (MJPEG HTTP clients + native DirectShow filter clients). Used to
+     * decide whether the capture pipeline should run at streaming rate or idle rate.
+     */
+    public long viewerCount() {
+        MjpegHttpServer current = this.server;
+        long mjpeg = current == null ? 0L : current.clientCount();
+        return mjpeg + com.ccvirtualcoms.client.camera.dshow.VirtualCameraTransport.get().clientCount();
+    }
+
     public boolean isRunning() {
         return this.running;
     }

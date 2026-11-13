@@ -59,6 +59,12 @@ public final class CameraCapturePipeline {
      */
     public static final long CAPTURE_INTERVAL_NANOS = 100_000_000L;
 
+    /** Capture interval while somebody watches a stream (30 fps). */
+    public static final long STREAMING_CAPTURE_INTERVAL_NANOS = 33_333_333L;
+
+    /** Capture interval with no viewers: keep a slow live preview without wasting GPU (5 fps). */
+    public static final long IDLE_CAPTURE_INTERVAL_NANOS = 200_000_000L;
+
     /**
      * Minimum spacing between main-target captures. Each one forces the player's view to be rendered
      * twice, so this is deliberately far below the display frame rate (10 captures per second).
@@ -218,7 +224,14 @@ public final class CameraCapturePipeline {
             return;
         }
         long now = System.nanoTime();
-        if (now - this.lastCaptureNanos < CAPTURE_INTERVAL_NANOS) {
+        // Adaptive capture rate: stream at 30 fps only while somebody watches (MJPEG/DirectShow),
+        // otherwise idle at 5 fps so an unwatched camera does not keep re-rendering the world.
+        boolean watched = com.ccvirtualcoms.client.camera.stream.CameraStreamService.get()
+                .viewerCount() > 0L;
+        long captureInterval = watched
+                ? STREAMING_CAPTURE_INTERVAL_NANOS
+                : IDLE_CAPTURE_INTERVAL_NANOS;
+        if (now - this.lastCaptureNanos < captureInterval) {
             return;
         }
         CapturedCamera best = null;
