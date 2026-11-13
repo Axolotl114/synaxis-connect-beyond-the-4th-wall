@@ -71,19 +71,15 @@ public class CameraTransmitterBlock extends BaseEntityBlock {
         builder.add(FACING);
     }
 
-    /** Ticks on the server only; the client-side capture lifecycle is driven by sync payloads. */
+    /**
+     * No block entity ticker: cameras are advanced by {@link CameraServerTicker} from the server
+     * tick event, so they keep working when no player is near enough to tick their chunk.
+     */
     @Nullable
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state,
                                                                  BlockEntityType<T> type) {
-        if (level.isClientSide()) {
-            return null;
-        }
-        return (tickLevel, pos, tickState, blockEntity) -> {
-            if (blockEntity instanceof CameraTransmitterBlockEntity camera) {
-                camera.serverTick();
-            }
-        };
+        return null;
     }
 
     @Override

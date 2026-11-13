@@ -20,8 +20,8 @@ public record CameraResolution(int width, int height) {
     /** Upper bound for either dimension. */
     public static final int MAX_WIDTH = 1920;
 
-    /** Upper bound for the height. */
-    public static final int MAX_HEIGHT = 1080;
+    /** Upper bound for the height. 4:3 presets go up to 1440. */
+    public static final int MAX_HEIGHT = 1440;
 
     /**
      * The budget cap, expressed as {@code width * height * fps}. 1280x720 at 30 fps is the
@@ -101,15 +101,15 @@ public record CameraResolution(int width, int height) {
         return new CameraResolution(width, height);
     }
 
-    /** Clamps a requested size and the frame rate so that both stay inside the budget. */
+    /**
+     * Clamps a requested size into the legal range.
+     *
+     * <p>The {@code width * height * fps} budget is enforced by the frame scheduler (which reduces
+     * the effective frame rate and logs the degradation) rather than by silently shrinking the
+     * user's chosen resolution; this method only guarantees that the stored size is legal and
+     * even.
+     */
     public static CameraResolution sanitizedForFps(int width, int height, int fps) {
-        CameraResolution resolution = new CameraResolution(width, height);
-        while (!resolution.fitsBudget(fps) && resolution.width() > MIN_DIMENSION
-                && resolution.height() > MIN_DIMENSION) {
-            resolution = new CameraResolution(
-                    Math.max(MIN_DIMENSION, resolution.width() * 3 / 4),
-                    Math.max(MIN_DIMENSION, resolution.height() * 3 / 4));
-        }
-        return resolution;
+        return new CameraResolution(width, height);
     }
 }

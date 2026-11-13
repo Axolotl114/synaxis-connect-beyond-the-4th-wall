@@ -10,7 +10,6 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
@@ -96,18 +95,9 @@ public record CameraStatusPayload(
         PacketDistributor.sendToPlayer(player, of(camera));
     }
 
-    /** Client side: hand the snapshot to the block entity the GUI reads from. */
+    /** Client side: hand the snapshot to the client-only handler for the block entity. */
     public void handle(IPayloadContext context) {
-        context.enqueueWork(() -> {
-            Level level = net.minecraft.client.Minecraft.getInstance().level;
-            if (level == null) {
-                return;
-            }
-            if (level.getBlockEntity(this.pos) instanceof CameraTransmitterBlockEntity camera) {
-                camera.applyStatusSnapshot(this.config, this.status, this.deviceName, this.streamUrl,
-                        this.redstoneSignal, this.revision, this.detail);
-            }
-        });
+        context.enqueueWork(() -> com.ccvirtualcoms.client.CameraStatusClientHooks.handle(this));
     }
 
     @Override

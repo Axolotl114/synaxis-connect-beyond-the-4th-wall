@@ -59,11 +59,12 @@ venv/
 # ESP32 / Arduino firmware.
 /esp32/
 
-# The Python API directory ships exactly two files; ignore the rest (hardware
+# The Python API directory ships exactly three files; ignore the rest (hardware
 # bridge scripts, magnetometer/grip research programs, calibration data, web UI).
 /python/*
 !/python/cc_virtual_coms.py
 !/python/example.py
+!/python/camera_example.py
 
 # Superseded copy of the library.
 /pys/
@@ -80,6 +81,10 @@ venv/
 
 # Agent-team working material (research notes, extracted reference assets).
 /.research/
+
+# Blockbench working files and agent tooling used to prototype models.
+/blockbench_edits/
+/.god-agent/
 
 # Local rollback snapshots of previous project versions (not published).
 /_backups/

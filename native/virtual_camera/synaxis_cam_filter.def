@@ -1,0 +1,6 @@
+LIBRARY synaxis_cam_filter
+EXPORTS
+    DllRegisterServer
+    DllUnregisterServer
+    DllGetClassObject
+    DllCanUnloadNow

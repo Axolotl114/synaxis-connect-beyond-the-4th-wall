@@ -10,6 +10,12 @@ authors = "${mod_authors}"
 description = '''${mod_description}'''
 logoFile = "logo.png"
 
+# Camera capture needs to hook the client camera / level renderer. NeoForge 21.1
+# reads mixin configuration from this table (no refmap is needed with official
+# Mojang mappings).
+[[mixins]]
+config = "cc_virtual_coms.mixins.json"
+
 [[dependencies.${mod_id}]]
 modId = "neoforge"
 type = "required"

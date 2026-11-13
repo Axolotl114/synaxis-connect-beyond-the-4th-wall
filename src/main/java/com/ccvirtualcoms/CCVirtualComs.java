@@ -134,6 +134,7 @@ public final class CCVirtualComs {
         VirtualComsServer listener = VirtualComsServer.get();
         listener.drainGameTasks();
         listener.tickDevices();
+        com.ccvirtualcoms.content.camera.CameraServerTicker.tickAll();
     }
 
     private void onServerStarted(ServerStartedEvent event) {

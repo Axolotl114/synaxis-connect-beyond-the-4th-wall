@@ -31,10 +31,12 @@ import java.util.Set;
  *       stream. Highest priority trigger.</li>
  *   <li>{@code streaming} - {@code boolean}, output. The circuit reads it; {@code true} while the
  *       camera is actually streaming (enable requested and the stream started).</li>
- *   <li>{@code euler_angle} - {@code vec3}, input <em>and</em> output. Component order is
- *       {@code (yaw, pitch, roll)} in degrees. Each component's meaning is chosen per axis in the
- *       GUI: world stable components are absolute world angles, follow components are local angles
- *       relative to the Sable sub-level. Writing applies the same per-axis interpretation.</li>
+ *   <li>{@code euler_angle_in} / {@code euler_angle_out} - {@code vec3}, input and output.
+ *       Component order is {@code (yaw, pitch, roll)} in degrees. Synaxis requires port names to be
+ *       unique, so the specification's bidirectional {@code euler_angle} terminal is a matched
+ *       input/output pair. Each component's meaning is chosen per axis in the GUI: world stable
+ *       components are absolute world angles, follow components are local angles relative to the
+ *       Sable sub-level. Writing applies the same per-axis interpretation.</li>
  * </ul>
  */
 public final class CameraTransmitterComponent implements ComponentType {

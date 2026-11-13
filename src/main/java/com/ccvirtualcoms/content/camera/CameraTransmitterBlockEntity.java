@@ -83,6 +83,10 @@ public class CameraTransmitterBlockEntity extends BlockEntity
     private static final String REVISION_TAG = "Revision";
     private static final String ENDPOINT_ID_TAG = "EndpointId";
     private static final String STATUS_DETAIL_TAG = "StatusDetail";
+    /** Diagnostic mirrors, written for /data get and logs; never read back into state. */
+    private static final String DIAG_STREAMING_TAG = "DiagStreaming";
+    private static final String DIAG_REDSTONE_TAG = "DiagRedstone";
+    private static final String DIAG_DEVICE_SLOT_TAG = "DiagDeviceSlot";
 
     /** How often the full status snapshot is pushed to watching clients, in ticks. */
     private static final int STATUS_SYNC_INTERVAL = 10;
@@ -243,23 +247,32 @@ public class CameraTransmitterBlockEntity extends BlockEntity
 
     // ------------------------------------------------------------------ Synaxis access
 
-    /** The fixed terminal layout of a camera transmitter. */
+    /**
+     * The fixed terminal layout of a camera transmitter.
+     *
+     * <p>Synaxis requires port names to be unique across inputs and outputs, so the bidirectional
+     * {@code euler_angle} terminal of the specification is represented by a matched input/output
+     * pair: {@code euler_angle_in} (the circuit drives it) and {@code euler_angle_out} (the circuit
+     * reads it). Both carry {@code (yaw, pitch, roll)} in degrees with the same per-axis
+     * world-stable / follow-sub-level semantics.
+     */
     public static ComponentSchema schema() {
         return ComponentSchema.of(
                 List.of(
                         PortDef.input("enable", SignalType.BOOLEAN),
-                        PortDef.input("euler_angle", SignalType.VEC3)),
+                        PortDef.input("euler_angle_in", SignalType.VEC3)),
                 List.of(
                         PortDef.output("streaming", SignalType.BOOLEAN),
-                        PortDef.output("euler_angle", SignalType.VEC3)));
+                        PortDef.output("euler_angle_out", SignalType.VEC3)));
     }
 
     /** Short labels for the Cimulink editor. */
     public Map<String, String> portLabels() {
         Map<String, String> labels = new LinkedHashMap<>();
         labels.put("enable", "enable [in] boolean");
-        labels.put("euler_angle", "euler_angle [in/out] vec3 (yaw, pitch, roll)");
+        labels.put("euler_angle_in", "euler_angle [in] vec3 (yaw, pitch, roll)");
         labels.put("streaming", "streaming [out] boolean");
+        labels.put("euler_angle_out", "euler_angle [out] vec3 (yaw, pitch, roll)");
         return labels;
     }
 
@@ -267,7 +280,8 @@ public class CameraTransmitterBlockEntity extends BlockEntity
     public SignalValue readForSynaxis(String name) {
         return switch (name) {
             case "streaming" -> new SignalValue.Bool(this.streamingDesired);
-            case "euler_angle" -> new SignalValue.Vec3(this.eulerYaw, this.eulerPitch, this.eulerRoll);
+            case "euler_angle", "euler_angle_out" ->
+                    new SignalValue.Vec3(this.eulerYaw, this.eulerPitch, this.eulerRoll);
             default -> null;
         };
     }
@@ -283,7 +297,7 @@ public class CameraTransmitterBlockEntity extends BlockEntity
                     this.enableInput = bool.value();
                 }
             }
-            case "euler_angle" -> {
+            case "euler_angle", "euler_angle_in" -> {
                 if (value instanceof SignalValue.Vec3 vec) {
                     if (Double.isFinite(vec.x()) && Double.isFinite(vec.y()) && Double.isFinite(vec.z())) {
                         this.eulerYaw = normalizeYaw(vec.x());
@@ -493,7 +507,16 @@ public class CameraTransmitterBlockEntity extends BlockEntity
     // ------------------------------------------------------------------ lifecycle
 
     @Override
+    public void setLevel(Level level) {
+        super.setLevel(level);
+        if (level != null && !level.isClientSide()) {
+            CameraServerTicker.register(this);
+        }
+    }
+
+    @Override
     public void setRemoved() {
+        CameraServerTicker.unregister(this);
         this.unregisterEndpoint();
         com.ccvirtualcoms.content.camera.CameraDeviceSlots.release(this);
         super.setRemoved();
@@ -501,6 +524,8 @@ public class CameraTransmitterBlockEntity extends BlockEntity
 
     @Override
     public void onChunkUnloaded() {
+        // Keep the camera registered while the chunk is merely unloaded: the server tick handler
+        // tolerates a camera whose level/chunk is unavailable and it re-registers on reload.
         this.unregisterEndpoint();
         com.ccvirtualcoms.content.camera.CameraDeviceSlots.release(this);
         super.onChunkUnloaded();
@@ -527,6 +552,9 @@ public class CameraTransmitterBlockEntity extends BlockEntity
         tag.putInt(REVISION_TAG, this.revision);
         tag.putUUID(ENDPOINT_ID_TAG, this.endpointId.value());
         tag.putString(STATUS_DETAIL_TAG, this.statusDetail);
+        tag.putBoolean(DIAG_STREAMING_TAG, this.streamingDesired);
+        tag.putInt(DIAG_REDSTONE_TAG, this.redstoneSignal);
+        tag.putInt(DIAG_DEVICE_SLOT_TAG, this.deviceSlot);
     }
 
     @Override

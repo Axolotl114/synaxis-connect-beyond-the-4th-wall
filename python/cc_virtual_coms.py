@@ -27,6 +27,7 @@ Name                    Value   Direction / meaning
 ``MSG_DATA_WRITE``      0x02    Python -> game; write a port value
 ``MSG_HEARTBEAT``       0x03    either direction; liveness probe
 ``MSG_ERROR``           0x04    either direction; carries ``{"error": "..."}``
+``MSG_CAMERA_LIST``     0x10    game -> Python; camera metadata + stream status snapshot
 ======================  ======  ===================================================
 
 Port value types
@@ -69,6 +70,38 @@ Quick start
     for port, ptype, value in coms:
         print(port, ptype, value)
 
+Camera streaming (图传摄像头)
+-----------------------------
+
+Camera metadata travels through the *same* 25585 protocol as one extra game -> Python push,
+``MSG_CAMERA_LIST`` (0x10). Video never travels over TCP: the mod runs a separate loopback MJPEG
+server (default ``http://127.0.0.1:25586``; override with
+``-Dcc_virtual_coms.camera.httpPort=<port>`` on the game side) exposing
+``/stream.mjpeg``, ``/camera/<packed-pos-hex>/stream.mjpeg``, ``/camera/<packed-pos-hex>/snapshot.jpg``
+and ``/api/cameras``. The camera list is pushed once when a client connects and again whenever it
+changes, so accessors below never block::
+
+    from cc_virtual_coms import CameraStream, Coms
+
+    coms = Coms()                                  # 连接游戏
+
+    for camera in coms.cameras():                  # 非阻塞：读后台泵缓存的快照
+        print(camera["name"], camera["status"], camera["resolution"], camera["stream_url"])
+
+    print(coms.camera_status("cam0"))              # "streaming" / "offline" / "driver_unavailable"
+
+    camera = CameraStream.from_camera(coms.cameras()[0])   # 或用 stream_url/pos/host+port 直接构造
+    camera.open()
+    frame = camera.read_frame(timeout=2.0)         # 完整 JPEG bytes；超时返回 None
+    camera.save("frame.jpg")                       # 零依赖落盘（原始 JPEG）
+    camera.show()                                  # 可选预览：PIL+Tk 优先，否则系统查看器，失败返回 False
+    camera.close()
+
+``cameras()`` returns ``[]`` when the game is an older build without the camera feature or when no
+snapshot has arrived yet; ``camera_status()`` then returns its ``default`` (``None`` unless given).
+``CameraStream`` needs only the standard library; Pillow/tkinter are optional and only make
+``show()`` smoother.
+
 底层 API（``pack_message`` / ``unpack_message`` / ``VirtualComsClient``）依然可用，
 ``Coms`` 只是它上面的一层薄封装。
 """
@@ -76,15 +109,21 @@ Quick start
 from __future__ import annotations
 
 import collections
+import io
 import json
+import os
 import queue
+import re
 import socket
 import struct
+import subprocess
 import sys
+import tempfile
 import threading
 import time
 import weakref
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from urllib.parse import urlsplit
 
 __all__ = [
     "MAGIC",
@@ -94,12 +133,22 @@ __all__ = [
     "MSG_DATA_WRITE",
     "MSG_HEARTBEAT",
     "MSG_ERROR",
+    "MSG_CAMERA_LIST",
     "MESSAGE_TYPE_NAMES",
     "PORT_TYPES",
     "DIRECTION_IN",
     "DIRECTION_OUT",
+    "DEFAULT_CAMERA_HOST",
+    "DEFAULT_CAMERA_PORT",
+    "CAMERA_STREAMING",
+    "CAMERA_OFFLINE",
+    "CAMERA_DRIVER_UNAVAILABLE",
+    "CAMERA_STATUSES",
     "ProtocolError",
     "NotConnectedError",
+    "CameraError",
+    "CameraStreamError",
+    "MjpegProtocolError",
     "pack_message",
     "unpack_message",
     "pack_port_value",
@@ -110,6 +159,15 @@ __all__ = [
     "unpack_binary_port_value",
     "infer_port_type",
     "coerce_port_value",
+    "parse_multipart_boundary",
+    "parse_part_headers",
+    "parse_http_head",
+    "looks_like_jpeg",
+    "MjpegStreamParser",
+    "camera_position_key",
+    "camera_position_hex",
+    "camera_stream_path",
+    "CameraStream",
     "VirtualComsClient",
     "Coms",
     "VirtualComs",
@@ -131,12 +189,17 @@ MSG_DATA_PUSH = 0x01
 MSG_DATA_WRITE = 0x02
 MSG_HEARTBEAT = 0x03
 MSG_ERROR = 0x04
+#: Game -> external only: camera metadata and stream status snapshot. Pushed when a client
+#: connects and again whenever the camera set changes. Older clients must ignore it; this client
+#: never sends it (see :class:`CameraStream` for the separate HTTP video channel).
+MSG_CAMERA_LIST = 0x10
 
 MESSAGE_TYPE_NAMES = {
     MSG_DATA_PUSH: "DATA_PUSH",
     MSG_DATA_WRITE: "DATA_WRITE",
     MSG_HEARTBEAT: "HEARTBEAT",
     MSG_ERROR: "ERROR",
+    MSG_CAMERA_LIST: "CAMERA_LIST",
 }
 
 TYPE_REAL = "real"
@@ -172,6 +235,32 @@ DEFAULT_PORT = 25585
 #: Guard against a desynchronised or hostile peer declaring an enormous payload.
 MAX_PAYLOAD_SIZE = 8 * 1024 * 1024
 
+# --------------------------------------------------------------------------------------
+# Camera constants
+# --------------------------------------------------------------------------------------
+
+#: The camera fallback stream is a separate loopback HTTP server. Mirrors the Java side default
+#: in ``CameraStreamUrls``; if the player overrides it with
+#: ``-Dcc_virtual_coms.camera.httpPort=<port>``, pass the same value to :class:`CameraStream`.
+DEFAULT_CAMERA_HOST = "127.0.0.1"
+DEFAULT_CAMERA_PORT = 25586
+
+#: Status strings reported by the mod for each camera (serialized ``CameraStreamStatus``).
+CAMERA_STREAMING = "streaming"
+CAMERA_OFFLINE = "offline"
+CAMERA_DRIVER_UNAVAILABLE = "driver_unavailable"
+CAMERA_STATUSES = (CAMERA_STREAMING, CAMERA_OFFLINE, CAMERA_DRIVER_UNAVAILABLE)
+
+#: Size guards for the MJPEG fallback stream (same "bounded parser" philosophy as the TCP frame).
+MAX_MJPEG_FRAME_SIZE = 8 * 1024 * 1024
+MAX_MJPEG_HEADER_SIZE = 64 * 1024
+MAX_MJPEG_BUFFER_SIZE = 16 * 1024 * 1024
+MAX_HTTP_HEAD_SIZE = 64 * 1024
+MJPEG_READ_CHUNK = 65536
+DEFAULT_STREAM_TIMEOUT = 5.0
+_MJPEG_BOUNDARY_MAX_LEN = 200
+_MJPEG_BOUNDARY_TAIL = re.compile(rb"[ \t]*\r?\n")
+
 
 class ProtocolError(Exception):
     """Raised when a peer sends something that is not a valid frame."""
@@ -179,6 +268,18 @@ class ProtocolError(Exception):
 
 class NotConnectedError(Exception):
     """Raised when an operation needs a live connection but none exists."""
+
+
+class CameraError(ValueError):
+    """Raised when the camera metadata pushed by the game is structurally malformed."""
+
+
+class CameraStreamError(Exception):
+    """Raised when a camera MJPEG stream cannot be opened or became unusable."""
+
+
+class MjpegProtocolError(CameraStreamError):
+    """Raised when MJPEG multipart framing is malformed or a size guard is exceeded."""
 
 
 # --------------------------------------------------------------------------------------
@@ -495,6 +596,1047 @@ def unpack_binary_port_value(data: bytes) -> Tuple[str, str, Any, str]:
 
 
 # --------------------------------------------------------------------------------------
+# Camera metadata: MSG_CAMERA_LIST -> Coms.cameras()
+# --------------------------------------------------------------------------------------
+
+#: Bit widths of Minecraft's packed ``BlockPos`` (see ``BlockPos.asLong``).
+_POS_X_BITS = 0x3FFFFFF
+_POS_Z_BITS = 0x3FFFFFF
+_POS_Y_BITS = 0xFFF
+
+
+def camera_position_key(pos: Any) -> int:
+    """Pack ``[x, y, z]`` exactly like Minecraft's ``BlockPos.asLong()``.
+
+    The mod names each camera stream after this packed position
+    (``/camera/<hex>/stream.mjpeg``), so this helper lets a caller build a stream URL from a
+    position without asking the game for one.
+    """
+    if not isinstance(pos, (list, tuple)) or len(pos) != 3:
+        raise ValueError("pos must be a sequence of 3 integers, got %r" % (pos,))
+    try:
+        x, y, z = (int(component) for component in pos)
+    except (TypeError, ValueError):
+        raise ValueError("pos must contain 3 integers, got %r" % (pos,))
+    return ((x & _POS_X_BITS) << 38) | ((z & _POS_Z_BITS) << 12) | (y & _POS_Y_BITS)
+
+
+def camera_position_hex(pos: Any) -> str:
+    """``[x, y, z]`` -> the lower-case hex form used in the HTTP stream paths."""
+    return format(camera_position_key(pos), "x")
+
+
+def camera_stream_path(pos: Any = None) -> str:
+    """The default MJPEG path for a camera.
+
+    Per-camera streams live at ``/camera/<packed-pos-hex>/stream.mjpeg``. Without a position the
+    global ``/stream.mjpeg`` endpoint is used (a mixed view is planned on the mod side).
+    """
+    if pos is None:
+        return "/stream.mjpeg"
+    return "/camera/%s/stream.mjpeg" % camera_position_hex(pos)
+
+
+def _camera_text(value: Any) -> str:
+    return "" if value is None else str(value)
+
+
+def _camera_number(value: Any, default: float = 0.0) -> float:
+    if isinstance(value, bool) or value is None:
+        return default
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return default
+    if result != result or result in (float("inf"), float("-inf")):  # NaN / infinity
+        return default
+    return result
+
+
+def _camera_pos(value: Any) -> Optional[List[int]]:
+    """Normalise a ``[x, y, z]`` position, returning ``None`` when it is unusable."""
+    if not isinstance(value, (list, tuple)) or len(value) != 3:
+        return None
+    result: List[int] = []
+    for component in value:
+        if isinstance(component, bool) or not isinstance(component, (int, float)):
+            return None
+        try:
+            result.append(int(component))
+        except (TypeError, ValueError):
+            return None
+    return result
+
+
+def _parse_http_url(url: Any) -> Optional[Tuple[str, int, str]]:
+    """Split an absolute ``http(s)`` URL into ``(host, port, path)``; ``None`` when unusable."""
+    text = _camera_text(url).strip()
+    if not text:
+        return None
+    try:
+        parts = urlsplit(text)
+    except ValueError:
+        return None
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        return None
+    try:
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+    except ValueError:
+        return None
+    return parts.hostname, int(port), parts.path or "/"
+
+
+def _valid_port(port: Any) -> int:
+    try:
+        value = int(port)
+    except (TypeError, ValueError):
+        raise ValueError("port must be an integer, got %r" % (port,))
+    if not 1 <= value <= 65535:
+        raise ValueError("port must be in 1..65535, got %r" % (port,))
+    return value
+
+
+def _resolve_stream_target(
+    host: Any, port: Any, path: Optional[str], stream_url: Optional[str], pos: Any
+) -> Tuple[str, int, str]:
+    """Resolve the (host, port, path) a stream request targets.
+
+    An explicit ``stream_url`` always wins, as the game is authoritative about where its stream
+    server lives. Otherwise the request is built from ``host``/``port`` and either ``path`` or the
+    camera's packed position.
+    """
+    if stream_url:
+        text = str(stream_url).strip()
+        parsed = _parse_http_url(text)
+        if parsed is not None:
+            return parsed
+        if text.startswith("/"):
+            return str(host or DEFAULT_CAMERA_HOST), _valid_port(port), text
+        raise ValueError("stream_url must be an absolute http(s) URL or a path, got %r"
+                         % (stream_url,))
+
+    resolved_host = str(host or DEFAULT_CAMERA_HOST)
+    resolved_port = _valid_port(port)
+    resolved_path = str(path) if path else camera_stream_path(pos)
+    if not resolved_path.startswith("/"):
+        resolved_path = "/" + resolved_path
+    return resolved_host, resolved_port, resolved_path
+
+
+def _normalize_camera(
+    entry: Any,
+    index: int,
+    default_host: str,
+    default_port: int,
+    driver: str,
+    driver_available: Optional[bool],
+) -> Optional[Dict[str, Any]]:
+    if not isinstance(entry, dict):
+        return None
+
+    pos = _camera_pos(entry.get("pos"))
+    name = _camera_text(entry.get("name")).strip()
+    device_name = _camera_text(entry.get("device_name")).strip()
+    if not name and not device_name and pos is not None:
+        name = "camera@%d,%d,%d" % (pos[0], pos[1], pos[2])
+    if not name:
+        if not device_name:
+            return None
+        name = device_name
+    if not device_name:
+        device_name = name
+
+    width = int(_camera_number(entry.get("width")))
+    height = int(_camera_number(entry.get("height")))
+    fps = _camera_number(entry.get("fps"))
+    status = _camera_text(entry.get("status")).strip().lower()
+    if not status:
+        status = CAMERA_DRIVER_UNAVAILABLE if driver_available is False else CAMERA_OFFLINE
+
+    entry_driver = _camera_text(entry.get("driver")).strip().lower()
+    entry_driver_available = entry.get("driver_available")
+    if not isinstance(entry_driver_available, bool):
+        entry_driver_available = driver_available
+
+    stream_url = _camera_text(entry.get("stream_url")).strip()
+    stream_host = str(default_host or DEFAULT_CAMERA_HOST)
+    stream_port = _valid_port(default_port)
+    stream_path = ""
+    if stream_url:
+        parsed = _parse_http_url(stream_url)
+        if parsed is not None:
+            stream_host, stream_port, stream_path = parsed
+    if not stream_path:
+        stream_path = camera_stream_path(pos)
+        if not stream_url:
+            stream_url = "http://%s:%d%s" % (stream_host, stream_port, stream_path)
+
+    camera: Dict[str, Any] = {
+        "index": index,
+        "name": name,
+        "device_name": device_name,
+        "pos": pos,
+        "width": width,
+        "height": height,
+        "resolution": ("%dx%d" % (width, height)) if width > 0 and height > 0 else "",
+        "fps": fps,
+        "status": status,
+        "driver": entry_driver or driver,
+        "stream_url": stream_url,
+        "stream_host": stream_host,
+        "stream_port": stream_port,
+        "stream_path": stream_path,
+    }
+    if entry_driver_available is not None:
+        camera["driver_available"] = entry_driver_available
+    return camera
+
+
+def normalize_camera_list(
+    payload: Any,
+    default_host: str = DEFAULT_CAMERA_HOST,
+    default_port: int = DEFAULT_CAMERA_PORT,
+) -> List[Dict[str, Any]]:
+    """Normalise a ``MSG_CAMERA_LIST`` payload into a list of camera dictionaries.
+
+    Tolerant on purpose: the game may omit optional fields and one malformed entry must not take
+    the whole list (or the background pump) down. A payload that is structurally wrong raises
+    :class:`CameraError`; the client turns that into a regular error callback.
+    """
+    if not isinstance(payload, dict):
+        raise CameraError("camera payload must be a JSON object, got %s" % type(payload).__name__)
+    entries = payload.get("cameras")
+    if entries is None:
+        entries = []
+    if not isinstance(entries, (list, tuple)):
+        raise CameraError("camera payload 'cameras' must be a list, got %s" % type(entries).__name__)
+
+    driver = _camera_text(payload.get("driver")).strip().lower()
+    raw_available = payload.get("driver_available")
+    driver_available = raw_available if isinstance(raw_available, bool) else None
+
+    cameras: List[Dict[str, Any]] = []
+    for entry in entries:
+        camera = _normalize_camera(entry, len(cameras), default_host, default_port, driver,
+                                   driver_available)
+        if camera is not None:
+            cameras.append(camera)
+    return cameras
+
+
+def resolve_camera(cameras: Any, name_or_pos: Any = None) -> Optional[Dict[str, Any]]:
+    """Find a camera by name, device name, position, position hex or list index.
+
+    ``None`` selects the first camera. ``int`` is a list index (negative allowed); ``str`` matches
+    ``name`` or ``device_name`` (exact first, then case-insensitive) and finally the packed-position
+    hex used in stream paths; ``[x, y, z]`` matches ``pos``. Returns ``None`` when not found.
+    """
+    if not cameras:
+        return None
+    if name_or_pos is None:
+        return cameras[0]
+    if isinstance(name_or_pos, bool):
+        raise TypeError("camera selector must be a name, position or index, not a bool")
+    if isinstance(name_or_pos, int):
+        try:
+            return cameras[name_or_pos]
+        except IndexError:
+            return None
+    if isinstance(name_or_pos, (list, tuple)):
+        wanted = _camera_pos(name_or_pos)
+        if wanted is None:
+            raise ValueError("camera position must be [x, y, z], got %r" % (name_or_pos,))
+        for camera in cameras:
+            if camera.get("pos") == wanted:
+                return camera
+        return None
+
+    wanted_text = str(name_or_pos).strip()
+    for camera in cameras:
+        if camera.get("name") == wanted_text or camera.get("device_name") == wanted_text:
+            return camera
+    lowered = wanted_text.lower()
+    for camera in cameras:
+        if (str(camera.get("name", "")).lower() == lowered
+                or str(camera.get("device_name", "")).lower() == lowered):
+            return camera
+    for camera in cameras:
+        pos = camera.get("pos")
+        if pos is not None and camera_position_hex(pos) == lowered:
+            return camera
+    return None
+
+
+# --------------------------------------------------------------------------------------
+# MJPEG over HTTP: multipart parser (pure, incremental, no socket)
+# --------------------------------------------------------------------------------------
+
+_NEED_MORE = object()
+_SKIPPED = object()
+_FINISHED = object()
+
+
+def parse_multipart_boundary(content_type: Optional[str]) -> Optional[bytes]:
+    """Extract the ``boundary`` from a ``multipart/x-mixed-replace`` Content-Type header.
+
+    Accepts unquoted and quoted values, any parameter order and any casing. Returns ``None`` when
+    the header is not a multipart stream or has no usable boundary.
+    """
+    if not content_type:
+        return None
+    pieces = str(content_type).split(";")
+    if not pieces[0].strip().lower().startswith("multipart/x-mixed-replace"):
+        return None
+    for piece in pieces[1:]:
+        key, separator, value = piece.partition("=")
+        if not separator or key.strip().lower() != "boundary":
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        if not value:
+            return None
+        try:
+            raw = value.encode("ascii")
+        except UnicodeEncodeError:
+            return None
+        if len(raw) > _MJPEG_BOUNDARY_MAX_LEN or b"\r" in raw or b"\n" in raw:
+            return None
+        return raw
+    return None
+
+
+def parse_part_headers(raw: bytes) -> Dict[str, str]:
+    """Parse one multipart part's header block into a lower-case-keyed dict."""
+    headers: Dict[str, str] = {}
+    for line in raw.replace(b"\r\n", b"\n").split(b"\n"):
+        if not line.strip():
+            continue
+        key, separator, value = line.partition(b":")
+        if not separator:
+            continue
+        try:
+            name = key.strip().decode("ascii").lower()
+        except UnicodeDecodeError:
+            continue
+        headers[name] = value.strip().decode("latin-1")
+    return headers
+
+
+def parse_http_head(raw: bytes) -> Tuple[int, Dict[str, str]]:
+    """Parse an HTTP response head into ``(status_code, headers)``.
+
+    :raises CameraStreamError: when the bytes are not an HTTP response at all.
+    """
+    lines = raw.replace(b"\r\n", b"\n").split(b"\n")
+    status_line = lines[0].decode("latin-1", "replace").strip()
+    parts = status_line.split(None, 2)
+    if len(parts) < 2 or not parts[0].upper().startswith("HTTP/"):
+        raise CameraStreamError("not an HTTP response: %r" % status_line)
+    try:
+        status = int(parts[1])
+    except ValueError:
+        raise CameraStreamError("malformed HTTP status line: %r" % status_line)
+    return status, parse_part_headers(b"\r\n".join(lines[1:]))
+
+
+def looks_like_jpeg(frame: bytes) -> bool:
+    """Cheap structural check: JPEG SOI marker at the start, EOI marker at the end."""
+    if len(frame) < 4 or frame[:2] != b"\xff\xd8":
+        return False
+    return frame.rstrip(b"\r\n \t\x00")[-2:] == b"\xff\xd9"
+
+
+class MjpegStreamParser:
+    """Incremental parser for ``multipart/x-mixed-replace`` MJPEG streams.
+
+    Feed arbitrary byte chunks with :meth:`feed`; every complete JPEG frame is returned as
+    ``bytes``. The parser owns no socket and never blocks, so it is driven directly by
+    :class:`CameraStream` and can be unit tested with hand-built byte streams or a fake server.
+
+    Robustness rules:
+
+    * any chunking (including one byte at a time and a boundary split across chunks);
+    * optional preamble before the first boundary, CRLF or bare-LF line endings;
+    * optional ``Content-Length`` (used only to reject oversized parts early);
+    * a corrupt part (no JPEG markers, empty, wrong length) is skipped, not fatal;
+    * per-frame, per-header-block and total-buffer size guards against a hostile peer.
+
+    :param boundary: value from :func:`parse_multipart_boundary`.
+    :param max_frame_size: reject parts larger than this.
+    :param max_header_size: reject a part whose header block is larger than this.
+    :param max_buffer_size: reject a stream that accumulates more than this without a frame.
+    :param validate_jpeg: skip parts that do not look like a complete JPEG.
+    """
+
+    def __init__(
+        self,
+        boundary: bytes,
+        max_frame_size: int = MAX_MJPEG_FRAME_SIZE,
+        max_header_size: int = MAX_MJPEG_HEADER_SIZE,
+        max_buffer_size: int = MAX_MJPEG_BUFFER_SIZE,
+        validate_jpeg: bool = True,
+    ) -> None:
+        if not boundary:
+            raise ValueError("boundary is required")
+        self.boundary = boundary
+        self._delimiter = b"--" + boundary
+        self._max_frame_size = int(max_frame_size)
+        self._max_header_size = int(max_header_size)
+        self._max_buffer_size = int(max_buffer_size)
+        self._validate = bool(validate_jpeg)
+
+        self._buffer = bytearray()
+        self._state = "boundary"  # boundary | headers | body
+        self._content_length: Optional[int] = None
+        self.part_headers: Dict[str, str] = {}
+        self.finished = False
+        #: Diagnostic counters (also handy in tests).
+        self.stats: Dict[str, int] = {"frames": 0, "skipped": 0, "bytes": 0}
+
+    def feed(self, data: bytes) -> List[bytes]:
+        """Append ``data`` and return every complete frame that became available."""
+        if data:
+            self._buffer.extend(data)
+            self.stats["bytes"] += len(data)
+
+        frames: List[bytes] = []
+        while not self.finished:
+            outcome = self._extract()
+            if outcome is _NEED_MORE:
+                break
+            if outcome is _FINISHED:
+                break
+            if outcome is _SKIPPED:
+                continue
+            frames.append(outcome)  # type: ignore[arg-type]
+
+        self._trim_buffer()
+        if len(self._buffer) > self._max_buffer_size:
+            raise MjpegProtocolError(
+                "multipart buffer exceeded %d bytes without a complete frame"
+                % self._max_buffer_size)
+        return frames
+
+    def reset(self) -> None:
+        """Drop buffered data and wait for the next boundary (used after a reconnect)."""
+        self._buffer = bytearray()
+        self._state = "boundary"
+        self._content_length = None
+        self.part_headers = {}
+        self.finished = False
+
+    # -- state machine --------------------------------------------------
+
+    def _extract(self) -> Any:
+        buf = self._buffer
+        while True:
+            if self._state == "boundary":
+                index = buf.find(self._delimiter)
+                if index < 0:
+                    return _NEED_MORE
+                after = index + len(self._delimiter)
+                tail = bytes(buf[after:after + 2])
+                if len(tail) < 2:
+                    return _NEED_MORE
+                if tail == b"--":
+                    self.finished = True
+                    return _FINISHED
+                window = bytes(buf[after:after + 200])
+                match = _MJPEG_BOUNDARY_TAIL.match(window)
+                if match is None:
+                    # A partial line break can span chunks; anything else is malformed.
+                    if len(window) < 200 and b"\n" not in window:
+                        return _NEED_MORE
+                    raise MjpegProtocolError(
+                        "malformed multipart boundary line after %r" % self._delimiter)
+                del buf[:after + match.end()]
+                self._state = "headers"
+                continue
+
+            if self._state == "headers":
+                index = buf.find(b"\r\n\r\n")
+                separator = 4
+                lf_index = buf.find(b"\n\n")
+                if lf_index >= 0 and (index < 0 or lf_index < index):
+                    index, separator = lf_index, 2
+                if index < 0:
+                    if len(buf) > self._max_header_size:
+                        raise MjpegProtocolError(
+                            "part header block exceeded %d bytes" % self._max_header_size)
+                    return _NEED_MORE
+                raw_headers = bytes(buf[:index])
+                del buf[:index + separator]
+                self.part_headers = parse_part_headers(raw_headers)
+                declared = self.part_headers.get("content-length")
+                self._content_length = None
+                if declared is not None and declared.strip().isdigit():
+                    self._content_length = int(declared.strip())
+                    if self._content_length > self._max_frame_size:
+                        raise MjpegProtocolError(
+                            "part declares %d bytes, above the %d byte frame limit"
+                            % (self._content_length, self._max_frame_size))
+                self._state = "body"
+                continue
+
+            # body
+            index = buf.find(self._delimiter)
+            if index < 0:
+                if len(buf) > self._max_frame_size + self._max_header_size:
+                    raise MjpegProtocolError(
+                        "frame exceeded %d bytes without a following boundary"
+                        % self._max_frame_size)
+                return _NEED_MORE
+
+            end = index
+            if end >= 2 and buf[end - 2:end] == b"\r\n":
+                end -= 2
+            elif end >= 1 and buf[end - 1:end] == b"\n":
+                end -= 1
+            frame = bytes(buf[:end])
+            del buf[:index]  # leave the delimiter for the boundary state
+            self._state = "boundary"
+
+            if len(frame) > self._max_frame_size:
+                raise MjpegProtocolError(
+                    "frame of %d bytes exceeds the %d byte limit"
+                    % (len(frame), self._max_frame_size))
+            if self._content_length is not None and len(frame) < self._content_length:
+                self.stats["skipped"] += 1
+                continue
+            if self._validate and not looks_like_jpeg(frame):
+                self.stats["skipped"] += 1
+                continue
+            self.stats["frames"] += 1
+            return frame
+
+    def _trim_buffer(self) -> None:
+        """Drop bytes that can never become part of a future frame."""
+        if self._state != "boundary" or self.finished:
+            return
+        if self._delimiter in self._buffer:
+            return
+        keep = len(self._delimiter) + 1
+        if len(self._buffer) > keep:
+            del self._buffer[:len(self._buffer) - keep]
+
+
+# --------------------------------------------------------------------------------------
+# MJPEG over HTTP: camera stream consumer
+# --------------------------------------------------------------------------------------
+
+
+class CameraStream:
+    """Consume one camera's MJPEG over HTTP stream (the video side of the camera feature).
+
+    The camera metadata comes over the 25585 protocol (:meth:`Coms.cameras`), but the JPEG frames
+    are served by a separate loopback HTTP server. This class is stdlib-only: Pillow/tkinter are
+    optional and only improve :meth:`show`.
+
+    The camera can be located several ways: pass a full ``stream_url`` (authoritative, as the game
+    knows best), a ``pos`` (packed into ``/camera/<hex>/stream.mjpeg``), a ``path``, or just
+    ``host``/``port`` for the global ``/stream.mjpeg`` view. Usually you build it from a
+    :meth:`Coms.cameras` entry::
+
+        camera = CameraStream.from_camera(coms.cameras()[0])
+
+        with camera:                                  # open() / close()
+            frame = camera.read_frame(timeout=2.0)    # complete JPEG bytes, or None on timeout
+            if frame is not None:
+                camera.save("latest.jpg")
+                camera.show()
+
+    The stream has **one reader**: do not call :meth:`read_frame` from several threads. Calling
+    :meth:`close` from another thread is fine and unblocks a pending read.
+
+    :param host: camera HTTP server host, ``127.0.0.1`` by default.
+    :param port: camera HTTP server port, ``25586`` by default (mirrors ``CameraStreamUrls``).
+    :param device_name: device name used for display; optional.
+    :param pos: block position ``[x, y, z]`` of the camera; builds the per-camera stream path.
+    :param name: camera display name; optional.
+    :param path: explicit request path, overriding the position-derived one.
+    :param stream_url: absolute ``http(s)`` URL; when given it wins over host/port/path.
+    :param timeout: connect + read timeout in seconds (also the default total read budget).
+    :param auto_reconnect: reconnect with bounded backoff when the stream drops.
+    :param max_frame_size: per-frame size guard.
+    :param validate_jpeg: skip parts that are not complete JPEG frames.
+    """
+
+    def __init__(
+        self,
+        host: str = DEFAULT_CAMERA_HOST,
+        port: int = DEFAULT_CAMERA_PORT,
+        device_name: Optional[str] = None,
+        pos: Any = None,
+        name: Optional[str] = None,
+        path: Optional[str] = None,
+        stream_url: Optional[str] = None,
+        timeout: float = DEFAULT_STREAM_TIMEOUT,
+        auto_reconnect: bool = True,
+        max_frame_size: int = MAX_MJPEG_FRAME_SIZE,
+        validate_jpeg: bool = True,
+    ) -> None:
+        resolved_host, resolved_port, resolved_path = _resolve_stream_target(
+            host, port, path, stream_url, pos)
+        self.host = resolved_host
+        self.port = resolved_port
+        self.path = resolved_path
+        self.pos = _camera_pos(pos)
+        self.name = str(name) if name else None
+        if device_name:
+            self.device_name = str(device_name)
+        elif self.name:
+            self.device_name = self.name
+        elif self.pos is not None:
+            self.device_name = "camera@%d,%d,%d" % (self.pos[0], self.pos[1], self.pos[2])
+        else:
+            self.device_name = "camera"
+
+        self.timeout = float(timeout)
+        if self.timeout <= 0:
+            raise ValueError("timeout must be positive, got %r" % (timeout,))
+        self.auto_reconnect = bool(auto_reconnect)
+        self.max_frame_size = int(max_frame_size)
+        self.validate_jpeg = bool(validate_jpeg)
+
+        self._sock: Optional[socket.socket] = None
+        self._parser: Optional[MjpegStreamParser] = None
+        self._pending: List[bytes] = []
+        self._last_frame: Optional[bytes] = None
+        self._last_error: Optional[str] = None
+        self._closed = False
+        self._lock = threading.RLock()
+
+        # Display state.
+        self._tk_root: Any = None
+        self._tk_label: Any = None
+        self._temp_frame_path: Optional[str] = None
+        self._last_file_show = 0.0
+        self._file_show_interval = 1.0
+        self.display_mode: Optional[str] = None
+
+    # -- construction helpers ------------------------------------------
+
+    @classmethod
+    def from_camera(
+        cls,
+        camera: Dict[str, Any],
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+        **kwargs: Any
+    ) -> "CameraStream":
+        """Build a stream from one :meth:`Coms.cameras` entry.
+
+        The entry's ``stream_url`` is used when present; otherwise ``host``/``port`` (or the
+        entry's ``stream_host``/``stream_port``) plus its ``pos`` are used. ``name`` and
+        ``device_name`` are display keys only: a request path needs ``stream_url`` or ``pos`` and
+        falls back to the global ``/stream.mjpeg`` when neither is known. Extra keyword arguments
+        are forwarded to the constructor.
+        """
+        if not isinstance(camera, dict):
+            raise CameraStreamError("camera entry must be a mapping, got %r" % (camera,))
+        name = camera.get("name")
+        device_name = camera.get("device_name")
+        pos = camera.get("pos")
+        stream_url = camera.get("stream_url")
+        if stream_url:
+            return cls(stream_url=str(stream_url), name=name, device_name=device_name,
+                       pos=pos, **kwargs)
+        resolved_host = host if host is not None else (camera.get("stream_host")
+                                                       or DEFAULT_CAMERA_HOST)
+        raw_port = port if port is not None else (camera.get("stream_port")
+                                                  or DEFAULT_CAMERA_PORT)
+        try:
+            resolved_port = int(raw_port)
+        except (TypeError, ValueError):
+            raise CameraStreamError("camera entry has an invalid stream_port: %r"
+                                    % (camera.get("stream_port"),))
+        return cls(host=resolved_host, port=resolved_port, name=name,
+                   device_name=device_name, pos=pos, **kwargs)
+
+    @property
+    def url(self) -> str:
+        """The absolute stream URL this object consumes."""
+        return "http://%s:%d%s" % (self.host, self.port, self.path)
+
+    @property
+    def last_frame(self) -> Optional[bytes]:
+        """The most recently read JPEG frame, or ``None``."""
+        return self._last_frame
+
+    @property
+    def last_error(self) -> Optional[str]:
+        """The most recent stream error, or ``None`` when the last operation succeeded."""
+        return self._last_error
+
+    @property
+    def closed(self) -> bool:
+        """Whether :meth:`close` has been called (the object can be reopened with :meth:`open`)."""
+        return self._closed
+
+    @property
+    def frame_count(self) -> int:
+        """Frames returned by this stream so far."""
+        parser = self._parser
+        return parser.stats["frames"] if parser is not None else 0
+
+    # -- connection ------------------------------------------------------
+
+    def open(self, timeout: Optional[float] = None) -> "CameraStream":
+        """Open the HTTP stream and read the multipart handshake.
+
+        :raises CameraStreamError: on a connection/HTTP/multipart failure.
+        """
+        self.close()
+        self._closed = False
+        connect_timeout = self.timeout if timeout is None else float(timeout)
+        sock = socket.create_connection((self.host, self.port), timeout=connect_timeout)
+        try:
+            sock.settimeout(connect_timeout)
+            request = (
+                "GET %s HTTP/1.1\r\n"
+                "Host: %s:%d\r\n"
+                "Accept: multipart/x-mixed-replace, */*\r\n"
+                "User-Agent: cc_virtual_coms-python\r\n"
+                "Connection: keep-alive\r\n"
+                "\r\n" % (self.path, self.host, self.port)
+            )
+            sock.sendall(request.encode("ascii"))
+
+            head = b""
+            while b"\r\n\r\n" not in head:
+                chunk = sock.recv(4096)
+                if not chunk:
+                    raise CameraStreamError(
+                        "camera server closed the connection during the HTTP handshake")
+                head += chunk
+                if len(head) > MAX_HTTP_HEAD_SIZE:
+                    raise CameraStreamError("camera server sent an oversized HTTP response head")
+            raw_head, leftover = head.split(b"\r\n\r\n", 1)
+            status, headers = parse_http_head(raw_head)
+            if status != 200:
+                raise CameraStreamError(
+                    "camera stream request failed: HTTP %d" % (status,))
+            content_type = headers.get("content-type", "")
+            boundary = parse_multipart_boundary(content_type)
+            if boundary is None:
+                raise CameraStreamError(
+                    "camera endpoint is not an MJPEG stream (Content-Type: %r)" % content_type)
+        except Exception:
+            try:
+                sock.close()
+            except OSError:
+                pass
+            raise
+
+        self._sock = sock
+        self._parser = MjpegStreamParser(
+            boundary,
+            max_frame_size=self.max_frame_size,
+            validate_jpeg=self.validate_jpeg,
+        )
+        self._pending = []
+        self._last_error = None
+        if leftover:
+            try:
+                self._pending.extend(self._parser.feed(leftover))
+            except Exception:
+                # A malformed first chunk must not leak the freshly opened socket.
+                self.close()
+                raise
+        return self
+
+    def close(self) -> None:
+        """Close the stream, release the socket and remove the temporary preview frame."""
+        self._closed = True
+        sock, self._sock = self._sock, None
+        self._parser = None
+        self._pending = []
+        if sock is not None:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            try:
+                sock.close()
+            except OSError:
+                pass
+        self._close_tk()
+        path, self._temp_frame_path = self._temp_frame_path, None
+        if path:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+    def __enter__(self) -> "CameraStream":
+        return self.open()
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
+    # -- reading ---------------------------------------------------------
+
+    def read_frame(self, timeout: Optional[float] = None) -> Optional[bytes]:
+        """Return the next complete JPEG frame, or ``None`` when the time budget is exhausted.
+
+        The budget (``timeout``, defaulting to the constructor ``timeout``) bounds a whole call,
+        including any reconnect attempts. A dropped connection triggers a bounded-backoff
+        reconnect when ``auto_reconnect`` is enabled; otherwise it raises
+        :class:`CameraStreamError`. The last, incomplete frame of a connection is discarded.
+
+        :raises CameraStreamError: when the stream is unusable and reconnecting is disabled.
+        """
+        total = self.timeout if timeout is None else float(timeout)
+        deadline = time.monotonic() + max(0.0, total)
+
+        while True:
+            with self._lock:
+                if self._closed:
+                    return None
+                if self._pending:
+                    frame = self._pending.pop(0)
+                    self._last_frame = frame
+                    return frame
+
+            if self._sock is None:
+                if self._closed:
+                    return None
+                if not self.auto_reconnect:
+                    raise CameraStreamError("camera stream is not open; call open() first")
+                if not self._reconnect(deadline):
+                    return None
+                continue
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+
+            try:
+                self._sock.settimeout(min(remaining, self.timeout))
+                chunk = self._sock.recv(MJPEG_READ_CHUNK)
+            except socket.timeout:
+                return None
+            except OSError as exc:
+                self._handle_drop("read failed: %s" % exc)
+                if not self.auto_reconnect:
+                    raise CameraStreamError("camera stream read failed: %s" % exc)
+                continue
+
+            if not chunk:
+                self._handle_drop("camera stream closed by the server")
+                if not self.auto_reconnect:
+                    raise CameraStreamError("camera stream closed by the server")
+                continue
+
+            try:
+                frames = self._parser.feed(chunk)  # type: ignore[union-attr]
+            except MjpegProtocolError as exc:
+                self._handle_drop(str(exc))
+                if not self.auto_reconnect:
+                    raise
+                continue
+            with self._lock:
+                self._pending.extend(frames)
+
+    def _handle_drop(self, reason: str) -> None:
+        self._last_error = reason
+        sock, self._sock = self._sock, None
+        if sock is not None:
+            try:
+                sock.close()
+            except OSError:
+                pass
+        self._parser = None
+        self._pending = []
+
+    def _reconnect(self, deadline: float) -> bool:
+        """Try to reopen the stream before ``deadline``; returns whether it succeeded."""
+        delay = 0.25
+        while not self._closed:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            try:
+                self.open(timeout=min(remaining, self.timeout))
+                self._last_error = None
+                return True
+            except (OSError, CameraStreamError) as exc:
+                self._last_error = str(exc)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            time.sleep(min(delay, remaining))
+            delay = min(delay * 2.0, 5.0)
+        return False
+
+    def __iter__(self) -> Iterator[bytes]:
+        """Yield frames until the stream times out or drops (never raises in the iterator)."""
+        while True:
+            try:
+                frame = self.read_frame()
+            except CameraStreamError:
+                return
+            if frame is None:
+                return
+            yield frame
+
+    # -- saving ----------------------------------------------------------
+
+    def save(self, path: str, frame: Optional[bytes] = None) -> str:
+        """Write one raw JPEG frame (default: the most recently read one) to ``path``."""
+        payload = frame if frame is not None else self._last_frame
+        if payload is None:
+            raise CameraStreamError("no frame to save - call read_frame() first")
+        directory = os.path.dirname(os.path.abspath(path))
+        if directory and not os.path.isdir(directory):
+            os.makedirs(directory, exist_ok=True)
+        with open(path, "wb") as handle:
+            handle.write(payload)
+        return path
+
+    def save_frames(
+        self,
+        directory: str,
+        count: int = 10,
+        prefix: str = "frame_",
+        interval: float = 0.0,
+        timeout: Optional[float] = None,
+    ) -> List[str]:
+        """Read up to ``count`` frames and write them as numbered ``.jpg`` files.
+
+        Best effort: a timeout or a dropped stream keeps the frames already written and records
+        the reason in :attr:`last_error` instead of raising.
+        """
+        os.makedirs(directory, exist_ok=True)
+        saved: List[str] = []
+        for index in range(int(count)):
+            try:
+                frame = self.read_frame(timeout=timeout)
+            except CameraStreamError as exc:
+                self._last_error = str(exc)
+                break
+            if frame is None:
+                break
+            path = os.path.join(directory, "%s%05d.jpg" % (prefix, index))
+            self.save(path, frame)
+            saved.append(path)
+            if interval > 0:
+                time.sleep(interval)
+        return saved
+
+    # -- display ---------------------------------------------------------
+
+    def show(self, frame: Optional[bytes] = None, mode: str = "auto") -> bool:
+        """Display one frame and return whether a display path succeeded.
+
+        Two tiers, best first:
+
+        1. ``tk`` + optional Pillow: a live Tk window (the only smooth preview);
+        2. a temporary ``.jpg`` handed to the system image viewer (no dependencies).
+
+        ``mode`` is ``"auto"`` (try both), ``"tk"`` or ``"file"``. The system view is a
+        *snapshot* path: the viewer is spawned at most once per second, not per frame. This
+        method never raises for a missing GUI; it returns ``False`` and sets :attr:`last_error`.
+        """
+        if mode not in ("auto", "tk", "file"):
+            raise ValueError("mode must be 'auto', 'tk' or 'file'")
+        payload = frame if frame is not None else self._last_frame
+        if payload is None:
+            self._last_error = "no frame to show - call read_frame() first"
+            return False
+        if mode in ("auto", "tk") and self._show_tk(payload):
+            self.display_mode = "tk"
+            return True
+        if mode == "tk":
+            return False
+        if self._show_file(payload):
+            self.display_mode = "file"
+            return True
+        return False
+
+    def _show_tk(self, frame: bytes) -> bool:
+        """Live preview through tkinter, which needs Pillow to decode JPEG."""
+        try:
+            import tkinter as tk
+            from PIL import Image, ImageTk
+        except Exception:  # noqa: BLE001 - optional dependencies / no display
+            return False
+        try:
+            if self._tk_root is None or not self._tk_root.winfo_exists():
+                root = tk.Tk()
+                root.title("cc_virtual_coms - %s" % self.device_name)
+                label = tk.Label(root)
+                label.pack()
+                self._tk_root, self._tk_label = root, label
+            image = Image.open(io.BytesIO(frame))
+            photo = ImageTk.PhotoImage(image)
+            self._tk_label.configure(image=photo)
+            self._tk_label.image = photo  # keep a reference; Tk does not own it
+            self._tk_root.update()
+            return True
+        except Exception as exc:  # noqa: BLE001 - no display, TclError, decode error
+            self._last_error = "tkinter preview unavailable: %s" % exc
+            return False
+
+    def _show_file(self, frame: bytes) -> bool:
+        """Write a temporary JPEG and hand it to the system image viewer."""
+        try:
+            if self._temp_frame_path is None:
+                handle, path = tempfile.mkstemp(prefix="cc_virtual_coms_", suffix=".jpg")
+                os.close(handle)
+                self._temp_frame_path = path
+            with open(self._temp_frame_path, "wb") as out:
+                out.write(frame)
+        except OSError as exc:
+            self._last_error = "cannot write preview frame: %s" % exc
+            return False
+
+        now = time.monotonic()
+        if now - self._last_file_show < self._file_show_interval:
+            # The viewer shows a snapshot; do not spawn one per frame.
+            return True
+        self._last_file_show = now
+
+        try:
+            opener = getattr(os, "startfile", None)
+            if opener is not None:
+                opener(self._temp_frame_path)
+                return True
+            if sys.platform == "darwin":
+                command = ["open", self._temp_frame_path]
+            else:
+                command = ["xdg-open", self._temp_frame_path]
+            subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        except (OSError, AttributeError) as exc:
+            self._last_error = "no system image viewer: %s" % exc
+            return False
+
+    def _close_tk(self) -> None:
+        root, self._tk_root = self._tk_root, None
+        self._tk_label = None
+        if root is not None:
+            try:
+                root.destroy()
+            except Exception:  # noqa: BLE001
+                pass
+
+    def __repr__(self) -> str:
+        return "<CameraStream %r name=%r connected=%s frames=%d>" % (
+            self.url, self.device_name, self._sock is not None, self.frame_count)
+
+    def __del__(self) -> None:
+        """Close the socket if the stream was dropped without :meth:`close`."""
+        try:
+            sock, self._sock = self._sock, None
+            if sock is not None:
+                sock.close()
+        except Exception:  # noqa: BLE001 - never raise from a finaliser
+            pass
+
+
+# --------------------------------------------------------------------------------------
 # High level client
 # --------------------------------------------------------------------------------------
 
@@ -549,6 +1691,12 @@ class VirtualComsClient:
         self._pump_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._last_error: Optional[str] = None
+
+        #: Latest camera snapshot pushed through ``MSG_CAMERA_LIST``. An immutable tuple that the
+        #: pump thread replaces atomically, so cache readers need no lock.
+        self._cameras: Tuple[Dict[str, Any], ...] = ()
+        self._camera_rev: Optional[int] = None
+        self._camera_callbacks: List[Callable[[List[Dict[str, Any]]], None]] = []
 
     # -------------------------------------------------------------- connection
 
@@ -720,6 +1868,9 @@ class VirtualComsClient:
         elif msg_type == MSG_HEARTBEAT:
             pass
 
+        elif msg_type == MSG_CAMERA_LIST:
+            self._ingest_camera_list(payload)
+
     def pump(self, timeout: Optional[float] = None) -> int:
         """Read and dispatch every frame that arrives within ``timeout`` seconds.
 
@@ -852,6 +2003,72 @@ class VirtualComsClient:
         """A copy of the whole value cache."""
         return dict(self._values)
 
+    # -------------------------------------------------------------- camera cache access
+
+    @property
+    def cameras(self) -> List[Dict[str, Any]]:
+        """A copy of the latest camera snapshot pushed by the game (empty for older mods)."""
+        return self.list_cameras()
+
+    def list_cameras(self) -> List[Dict[str, Any]]:
+        """Every camera reported in the latest ``MSG_CAMERA_LIST`` snapshot.
+
+        Each entry is a plain dict with ``name``, ``device_name``, ``pos``, ``width``, ``height``,
+        ``resolution``, ``fps``, ``status``, ``driver``, ``stream_url``, ``stream_host``,
+        ``stream_port`` and ``stream_path``. Returns ``[]`` until the game pushes a snapshot;
+        reads are served from the background pump cache and never block.
+        """
+        return [dict(camera) for camera in self._cameras]
+
+    def find_camera(
+        self, name_or_pos: Any = None, default: Optional[Dict[str, Any]] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Return one camera entry by name, device name, ``[x, y, z]`` position or index.
+
+        ``None`` selects the first camera. Returns ``default`` (``None`` by default) when no
+        camera matches, which is also the case when the game is an older build.
+        """
+        camera = resolve_camera(self._cameras, name_or_pos)
+        return camera if camera is not None else default
+
+    @property
+    def camera_revision(self) -> Optional[int]:
+        """The ``rev`` counter of the latest camera snapshot, or ``None``."""
+        return self._camera_rev
+
+    def on_cameras(
+        self, callback: Callable[[List[Dict[str, Any]]], None]
+    ) -> Callable[[List[Dict[str, Any]]], None]:
+        """Register ``callback(cameras)`` for every camera snapshot pushed by the game.
+
+        The callback runs on the background pump thread, so keep it short and thread-safe.
+        """
+        self._camera_callbacks.append(callback)
+        return callback
+
+    def _ingest_camera_list(self, payload: dict) -> None:
+        """Normalise and cache a camera snapshot; malformed input becomes an error callback."""
+        try:
+            cameras = normalize_camera_list(payload)
+        except CameraError as exc:
+            self._emit_error("invalid camera list: %s" % exc)
+            return
+
+        revision = payload.get("rev")
+        if isinstance(revision, bool) or not isinstance(revision, (int, float)):
+            self._camera_rev = None
+        else:
+            self._camera_rev = int(revision)
+
+        # Replace the tuple in one assignment: readers never see a half-updated list.
+        self._cameras = tuple(cameras)
+
+        for callback in list(self._camera_callbacks):
+            try:
+                callback(self.list_cameras())
+            except Exception as exc:  # noqa: BLE001 - user callbacks must not kill the pump
+                self._emit_error("camera callback raised: %s" % exc)
+
     @property
     def last_error(self) -> Optional[str]:
         """The most recent error reported by the game or by the socket layer."""
@@ -928,7 +2145,8 @@ class VirtualComsClient:
                         try:
                             client.connect()
                         except OSError:
-                            del client
+                            # The ``finally`` below drops the strong reference; deleting it here
+                            # would make that ``del`` raise UnboundLocalError.
                             continue
                     client.pump(timeout=0.2)
                 except NotConnectedError:
@@ -1278,6 +2496,42 @@ class Coms:
         """该端子所属电路板的串口号（游戏上报的）。"""
         return self._client.port_com(port_name, default)
 
+    # -------------------------------------------------------------- 图传摄像头
+
+    def cameras(self) -> List[Dict[str, Any]]:
+        """游戏上报的图传摄像头列表（非阻塞，读后台泵缓存的快照）。
+
+        每项是普通 dict：``name``、``device_name``、``pos``、``width``、``height``、
+        ``resolution``、``fps``、``status``、``driver``、``stream_url``、``stream_host``、
+        ``stream_port``、``stream_path``。
+
+        - 列表在客户端连接后由游戏推送（与端子快照同一时机），之后有变化再推；
+        - 旧版模组没有相机功能，或尚未收到快照时返回 ``[]``（不会报错）；
+        - 非后台模式（``Coms(background=False)``）需要自行 ``coms.client.pump()`` 让快照到达；
+        - 拿到条目后可以直接 ``CameraStream.from_camera(entry)`` 开流。
+        """
+        return self._client.list_cameras()
+
+    def camera_status(
+        self, name_or_pos: Any = None, default: Optional[str] = None
+    ) -> Optional[str]:
+        """返回某个相机的状态字符串：``"streaming"`` / ``"offline"`` / ``"driver_unavailable"``。
+
+        :param name_or_pos: 相机名称、设备名、``[x, y, z]`` 坐标或列表下标；``None`` 取第一个。
+        :param default: 未知相机 / 尚未收到快照（例如旧版模组或未连接）时返回的值，默认 ``None``。
+        """
+        camera = self._client.find_camera(name_or_pos)
+        if camera is None:
+            return default
+        return camera.get("status", default)
+
+    def camera(
+        self, name_or_pos: Any = None, default: Optional[Dict[str, Any]] = None
+    ) -> Optional[Dict[str, Any]]:
+        """返回单个相机条目（含 ``stream_url`` / ``pos`` 等），未找到时返回 ``default``。"""
+        camera = self._client.find_camera(name_or_pos)
+        return camera if camera is not None else default
+
     @property
     def last_error(self) -> Optional[str]:
         """最近一次错误（游戏回传的错误帧，或本地 socket 错误）。"""
@@ -1307,9 +2561,9 @@ class Coms:
         self.close()
 
     def __repr__(self) -> str:
-        return "<Coms com=%r %s:%d connected=%s ports=%d>" % (
+        return "<Coms com=%r %s:%d connected=%s ports=%d cameras=%d>" % (
             self.com, self._client.host, self._client.port,
-            self._client.connected, len(self._client.values))
+            self._client.connected, len(self._client.values), len(self._client._cameras))
 
 
 #: Readable alias.

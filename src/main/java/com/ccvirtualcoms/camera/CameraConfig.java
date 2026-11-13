@@ -271,8 +271,14 @@ public record CameraConfig(
         tag.putBoolean(TAG_HOLD_ON, this.holdOn);
         tag.putString(TAG_REDSTONE_MODE, this.redstoneMode.serializedName());
         tag.putInt(TAG_REDSTONE_THRESHOLD, this.redstoneThreshold);
-        tag.put(TAG_FREQUENCY_A, this.frequencyA.save(registries));
-        tag.put(TAG_FREQUENCY_B, this.frequencyB.save(registries));
+        // Empty stacks are simply omitted: an empty ItemStack tag cannot always be
+        // encoded back to SNBT by vanilla data commands.
+        if (!this.frequencyA.isEmpty()) {
+            tag.put(TAG_FREQUENCY_A, this.frequencyA.save(registries));
+        }
+        if (!this.frequencyB.isEmpty()) {
+            tag.put(TAG_FREQUENCY_B, this.frequencyB.save(registries));
+        }
         tag.putString(TAG_YAW_MODE, this.yawMode.serializedName());
         tag.putString(TAG_PITCH_MODE, this.pitchMode.serializedName());
         tag.putString(TAG_ROLL_MODE, this.rollMode.serializedName());
@@ -351,10 +357,24 @@ public record CameraConfig(
                 String.valueOf(this.fps), String.valueOf(this.color), String.valueOf(this.nightVision),
                 String.valueOf(this.redstoneControl), String.valueOf(this.holdOn),
                 this.redstoneMode.serializedName(), String.valueOf(this.redstoneThreshold),
-                String.valueOf(this.frequencyA.isEmpty()), String.valueOf(this.frequencyB.isEmpty()),
+                stackSignature(this.frequencyA), stackSignature(this.frequencyB),
                 this.yawMode.serializedName(), this.pitchMode.serializedName(), this.rollMode.serializedName(),
-                String.format(Locale.ROOT, "%.3f,%.3f,%.3f", this.offsetX, this.offsetY, this.offsetZ),
+                Double.toString(this.offsetX), Double.toString(this.offsetY), Double.toString(this.offsetZ),
                 this.renderMode.serializedName());
+    }
+
+    /**
+     * Content-aware signature of a frequency item.
+     *
+     * <p>Comparing only {@code isEmpty()} would make "replace frequency A with a different item"
+     * look like an unchanged configuration, so the item id, count and component/data hash are all
+     * part of the signature.
+     */
+    private static String stackSignature(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) {
+            return "empty";
+        }
+        return stack.getCount() + "x" + stack.getItem() + "#" + stack.getComponents().hashCode();
     }
 
     @Override

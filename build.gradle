@@ -21,6 +21,9 @@ java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 repositories {
     flatDir { dirs 'libs' }
+    // Only needed for the unit-test libraries (JUnit 5); the mod itself builds
+    // entirely from ./libs and needs no repository access.
+    mavenCentral()
 }
 
 neoForge {
@@ -37,6 +40,16 @@ neoForge {
             gameDirectory = file('run/client')
             // Override with -PcomsPort=25599 to run several instances side by side.
             jvmArguments.add("-Dcc_virtual_coms.port=${project.findProperty('comsPort') ?: '25585'}")
+            // Development-only helpers used by the automated camera smoke test:
+            //   -PclientArgs="--username DevCam --server 127.0.0.1 --port 25565"
+            //   -PcameraAutotest=true   (enables the scripted GUI/capture test)
+            if (project.hasProperty('clientArgs')) {
+                programArguments.addAll(
+                        project.property('clientArgs').toString().trim().split('\\s+').toList())
+            }
+            if (project.hasProperty('cameraAutotest')) {
+                jvmArguments.add("-Dcc_virtual_coms.autotest=1")
+            }
         }
         server {
             server()
@@ -54,6 +67,14 @@ neoForge {
             sourceSet sourceSets.main
         }
     }
+
+    // JUnit 5 tests run through NeoForge's own test harness so that tests may
+    // touch Minecraft classes (ItemStack, CompoundTag, ...) without starting a
+    // full client or server. The harness libraries are fetched once and cached.
+    unitTest {
+        enable()
+        testedMod = mods."${mod_id}"
+    }
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
@@ -68,6 +89,10 @@ dependencies {
     // offline; none of them are bundled into the produced jar.
     // ------------------------------------------------------------------
     implementation fileTree(dir: 'libs', include: ['*.jar'])
+
+    // Unit tests (see neoForge.unitTest above). Only used by `gradlew test`.
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.2'
 }
 
 // Expand gradle.properties values into neoforge.mods.toml.
@@ -109,3 +134,48 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.release = 21
 }
+
+// Discover JUnit 5 tests. Without this, Gradle's default JUnit 4 detector finds none of the
+// Jupiter test classes and `gradlew test` silently reports "0 tests".
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        exceptionFormat 'full'
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Optional native DirectShow virtual camera filter.
+//
+// Only built when native/virtual_camera/build.ps1 can find Visual Studio 2022
+// and the Windows SDK; otherwise the script exits 0 and the jar simply ships
+// without the DLL, leaving the MJPEG HTTP fallback as the only camera output.
+// The DLL lives under build/ and is therefore never committed to git.
+// ---------------------------------------------------------------------------
+def nativeFilterDir = layout.projectDirectory.dir('native/virtual_camera')
+def nativeFilterBuildDir = new File(rootDir, '.build/native')
+def nativeFilterStagingDir = layout.buildDirectory.dir('generated/native-resources')
+
+def buildNativeFilter = tasks.register('buildNativeFilter', Exec) {
+    group = 'build'
+    description = 'Builds the optional x64 DirectShow virtual camera DLL.'
+    onlyIf { org.gradle.internal.os.OperatingSystem.current().windows }
+    workingDir rootDir
+    commandLine 'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+            '-File', nativeFilterDir.file('build.ps1').asFile.absolutePath
+}
+
+def nativeDllFile = new File(nativeFilterBuildDir, 'synaxis_cam_filter.dll')
+
+def stageNativeFilter = tasks.register('stageNativeFilter', Copy) {
+    description = 'Stages the built native filter DLL as a mod resource.'
+    dependsOn buildNativeFilter
+    from(nativeDllFile)
+    // NativeLibraryLocator looks this up as /native/synaxis_cam_filter.dll inside the jar.
+    into(layout.buildDirectory.dir('generated/native-resources/native'))
+    onlyIf { nativeDllFile.exists() }
+}
+
+sourceSets.main.resources.srcDir(nativeFilterStagingDir)
+tasks.named('processResources') { dependsOn stageNativeFilter }
