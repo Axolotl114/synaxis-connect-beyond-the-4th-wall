@@ -302,6 +302,14 @@ public class CameraTransmitterBlockEntity extends BlockEntity
         };
     }
 
+    private double lastCircuitYaw = Double.NaN;
+    private double lastCircuitPitch = Double.NaN;
+    private double lastCircuitRoll = Double.NaN;
+    private double lastCircuitFov = Double.NaN;
+    private Boolean lastCircuitYawStabilizing;
+    private Boolean lastCircuitPitchStabilizing;
+    private Boolean lastCircuitRollStabilizing;
+
     /** Called by the Cimulink graph through the input side. */
     public void writeFromSynaxis(String name, SignalValue value) {
         if (value == null) {
@@ -315,6 +323,10 @@ public class CameraTransmitterBlockEntity extends BlockEntity
             }
             case "real_fov", "fov_in" -> {
                 if (value instanceof SignalValue.Real real) {
+                    if (real.value() == this.lastCircuitFov) {
+                        return;
+                    }
+                    this.lastCircuitFov = real.value();
                     int fov = (int) Math.round(real.value());
                     CameraConfig next = this.config.withFov(fov);
                     if (!next.equals(this.config)) {
@@ -331,6 +343,13 @@ public class CameraTransmitterBlockEntity extends BlockEntity
             case "euler_angle", "euler_angle_in" -> {
                 if (value instanceof SignalValue.Vec3 vec) {
                     if (Double.isFinite(vec.x()) && Double.isFinite(vec.y()) && Double.isFinite(vec.z())) {
+                        if (vec.x() == this.lastCircuitYaw && vec.y() == this.lastCircuitPitch
+                                && vec.z() == this.lastCircuitRoll) {
+                            return;
+                        }
+                        this.lastCircuitYaw = vec.x();
+                        this.lastCircuitPitch = vec.y();
+                        this.lastCircuitRoll = vec.z();
                         this.eulerYaw = normalizeYaw(vec.x());
                         this.eulerPitch = clampPitch(vec.y());
                         this.eulerRoll = normalizeRoll(vec.z());
@@ -347,6 +366,19 @@ public class CameraTransmitterBlockEntity extends BlockEntity
     private void applyStabilizing(int axis, SignalValue value) {
         if (!(value instanceof SignalValue.Bool bool)) {
             return;
+        }
+        Boolean previous = switch (axis) {
+            case 0 -> this.lastCircuitYawStabilizing;
+            case 1 -> this.lastCircuitPitchStabilizing;
+            default -> this.lastCircuitRollStabilizing;
+        };
+        if (previous != null && previous == bool.value()) {
+            return; // input unchanged: GUI edits stay authoritative
+        }
+        switch (axis) {
+            case 0 -> this.lastCircuitYawStabilizing = bool.value();
+            case 1 -> this.lastCircuitPitchStabilizing = bool.value();
+            default -> this.lastCircuitRollStabilizing = bool.value();
         }
         CameraAxisMode mode = bool.value() ? CameraAxisMode.WORLD_STABLE : CameraAxisMode.FOLLOW_SUBLEVEL;
         CameraConfig next = switch (axis) {
