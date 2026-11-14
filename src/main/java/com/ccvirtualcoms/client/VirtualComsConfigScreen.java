@@ -183,6 +183,8 @@ public class VirtualComsConfigScreen extends Screen {
         this.comIdBox.setMaxLength(32);
         this.comIdBox.setValue(this.comIdDraft);
         this.comIdBox.setResponder(value -> this.comIdDraft = value);
+        this.comIdBox.setBordered(false);
+        this.comIdBox.setTextColor(0xFF202028);
         this.addRenderableWidget(this.comIdBox);
 
         this.addRenderableWidget(Button.builder(Component.translatable("cc_virtual_coms.screen.apply"),
@@ -258,6 +260,8 @@ public class VirtualComsConfigScreen extends Screen {
         this.addNameBox.setMaxLength(48);
         this.addNameBox.setValue(this.addNameDraft);
         this.addNameBox.setResponder(value -> this.addNameDraft = value);
+        this.addNameBox.setBordered(false);
+        this.addNameBox.setTextColor(0xFF202028);
         this.addRenderableWidget(this.addNameBox);
 
         this.addTypeButton = this.addRenderableWidget(Button.builder(
@@ -385,6 +389,17 @@ public class VirtualComsConfigScreen extends Screen {
         int y1 = this.top + PANEL_HEIGHT;
 
         guiGraphics.fill(x0, y0, x1, y1, COLOR_PANEL);
+        // white input fields (the edit boxes render borderless text on top)
+        if (this.comIdBox != null) {
+            guiGraphics.fill(this.comIdBox.getX() - 3, this.comIdBox.getY() - 2,
+                    this.comIdBox.getX() + this.comIdBox.getWidth() + 3,
+                    this.comIdBox.getY() + this.comIdBox.getHeight() + 2, 0xFFFFFFFF);
+        }
+        if (this.addNameBox != null) {
+            guiGraphics.fill(this.addNameBox.getX() - 3, this.addNameBox.getY() - 2,
+                    this.addNameBox.getX() + this.addNameBox.getWidth() + 3,
+                    this.addNameBox.getY() + this.addNameBox.getHeight() + 2, 0xFFFFFFFF);
+        }
         guiGraphics.fill(x0, y0, x1, y0 + 1, COLOR_BORDER);
         guiGraphics.fill(x0, y1 - 1, x1, y1, COLOR_BORDER);
         guiGraphics.fill(x0, y0, x0 + 1, y1, COLOR_BORDER);

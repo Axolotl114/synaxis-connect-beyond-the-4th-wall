@@ -70,9 +70,13 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
         pose.pushPose();
         applyFacing(pose, facing);
 
-        double yaw = camera.eulerAngles()[0];
-        double pitch = camera.eulerAngles()[1];
-        double roll = camera.eulerAngles()[2];
+        double rawYaw = camera.eulerAngles()[0];
+        double rawPitch = camera.eulerAngles()[1];
+        double rawRoll = camera.eulerAngles()[2];
+        double yaw = rawYaw;
+        double pitch = rawPitch;
+        double roll = rawRoll;
+        org.joml.Quaterniond headTarget = null;
         if (camera.config() != null) {
             dev.ryanhcode.sable.companion.SubLevelAccess subLevel =
                     com.ccvirtualcoms.content.camera.CameraLocator.containingSubLevel(
@@ -98,9 +102,9 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
                         .invert().mul(worldRotation);
                 float[] display = com.ccvirtualcoms.client.camera.capture.CameraTransformMath
                         .eulerFromRotation(modelRotation, new float[3]);
-                yaw = display[0];
-                pitch = display[1];
-                roll = display[2];
+                // Head-only: keep the frames on the raw angles and aim the head with a quaternion
+                // (no Euler decomposition of the converted pose -> no gimbal-lock roll spinning).
+                headTarget = new org.joml.Quaterniond(modelRotation);
             }
         }
 
@@ -120,13 +124,41 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
         }
 
         pose.pushPose();
-        pivotRotate(pose, Axis.ZP, (float) roll, 8.0D, CAMERA_PIVOT, 8.0D);
+        if (headTarget != null) {
+            org.joml.Quaterniond facingQuat = facingQuaternion(facing);
+            float yawAngle = (float) (facing.toYRot() - rawYaw + 180.0D);
+            org.joml.Quaterniond frame = new org.joml.Quaterniond(facingQuat)
+                    .mul(new org.joml.Quaterniond().rotationY((float) Math.toRadians(yawAngle)))
+                    .mul(new org.joml.Quaterniond().rotationX((float) Math.toRadians(-rawPitch)));
+            org.joml.Quaterniond target = new org.joml.Quaterniond(headTarget)
+                    .mul(new org.joml.Quaterniond().rotationY((float) Math.PI));
+            org.joml.Quaterniond delta = frame.invert().mul(target);
+            pose.translate(8.0D / 16.0D, CAMERA_PIVOT / 16.0D, 8.0D / 16.0D);
+            pose.mulPose(new org.joml.Quaternionf(delta));
+            pose.translate(-8.0D / 16.0D, -CAMERA_PIVOT / 16.0D, -8.0D / 16.0D);
+        } else {
+            pivotRotate(pose, Axis.ZP, (float) roll, 8.0D, CAMERA_PIVOT, 8.0D);
+        }
         draw("roll", pose, buffers, state, light, packedOverlay);
         pose.popPose();
 
         pose.popPose();
         pose.popPose();
         pose.popPose();
+    }
+
+    private static org.joml.Quaterniond facingQuaternion(Direction facing) {
+        org.joml.Quaterniond quat = new org.joml.Quaterniond();
+        switch (facing) {
+            case SOUTH -> quat.rotationY((float) Math.PI);
+            case EAST -> quat.rotationY((float) (Math.PI / 2.0D));
+            case WEST -> quat.rotationY((float) (Math.PI * 1.5D));
+            case UP -> quat.rotationX((float) (Math.PI * 1.5D));
+            case DOWN -> quat.rotationX((float) (Math.PI / 2.0D));
+            default -> {
+            }
+        }
+        return quat;
     }
 
     private static void applyFacing(PoseStack pose, Direction facing) {
