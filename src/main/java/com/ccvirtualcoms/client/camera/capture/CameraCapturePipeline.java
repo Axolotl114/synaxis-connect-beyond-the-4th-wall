@@ -291,6 +291,11 @@ public final class CameraCapturePipeline {
         }
         this.captureProjection = new org.joml.Matrix4f(
                 com.mojang.blaze3d.systems.RenderSystem.getProjectionMatrix());
+        boolean thermalLook = !config.color() && config.nightVision();
+        if (thermalLook) {
+            EntityMaskCollector.begin(minecraft.getMainRenderTarget().width,
+                    minecraft.getMainRenderTarget().height);
+        }
         this.captureFov = config.fov();
         if (this.captureFov != this.loggedCaptureFov) {
             this.loggedCaptureFov = this.captureFov;
@@ -307,21 +312,21 @@ public final class CameraCapturePipeline {
      * monochrome + night-vision palette can lift only those pixels.
      */
     /**
-     * Cheap CPU-only entity mask: projects each entity bounding box with the exact projection and
-     * camera rotation of the captured frame and fills its screen-space rectangle. No extra world
-     * render, no framebuffer, and it stays aligned with the colour frame for any yaw.
+     * Builds the night-vision mask from the entity rectangles recorded during the real camera
+     * render (so the angle always matches the captured frame) and refines each rectangle with the
+     * depth buffer so the result follows the entity silhouette instead of a plain box.
      */
     private float[] renderEntityMask(Minecraft minecraft, int width, int height) {
-        if (minecraft.level == null || minecraft.gameRenderer.getMainCamera() == null) {
+        java.util.List<float[]> rects = EntityMaskCollector.rects();
+        EntityMaskCollector.end();
+        if (minecraft.level == null || rects.isEmpty()) {
             return null;
         }
-        net.minecraft.client.Camera camera = minecraft.gameRenderer.getMainCamera();
-        org.joml.Quaternionf rotation = new org.joml.Quaternionf(camera.rotation());
-        net.minecraft.world.phys.Vec3 cameraPos = camera.getPosition();
-        org.joml.Matrix4f projection = this.captureProjection != null
-                ? this.captureProjection
-                : new org.joml.Matrix4f(com.mojang.blaze3d.systems.RenderSystem.getProjectionMatrix());
         com.mojang.blaze3d.pipeline.RenderTarget main = minecraft.getMainRenderTarget();
+        float[] distances = this.readProximityMask(minecraft, main.width, main.height);
+        if (distances == null) {
+            return null;
+        }
         double destinationAspect = (double) width / (double) height;
         double sourceAspect = (double) main.width / (double) main.height;
         int cropX = 0;
@@ -336,57 +341,23 @@ public final class CameraCapturePipeline {
             cropY = (main.height - cropHeight) / 2;
         }
         float[] mask = new float[width * height];
-        org.joml.Vector3f view = new org.joml.Vector3f();
-        org.joml.Vector4f clip = new org.joml.Vector4f();
-        float minX = Float.MAX_VALUE;
-        float minY = Float.MAX_VALUE;
-        float maxX = -Float.MAX_VALUE;
-        float maxY = -Float.MAX_VALUE;
-        for (net.minecraft.world.entity.Entity entity : minecraft.level.entitiesForRendering()) {
-            if (entity == minecraft.getCameraEntity() || !entity.shouldRender(
-                    cameraPos.x, cameraPos.y, cameraPos.z)) {
-                continue;
-            }
-            net.minecraft.world.phys.AABB box = entity.getBoundingBox();
-            minX = Float.MAX_VALUE;
-            minY = Float.MAX_VALUE;
-            maxX = -Float.MAX_VALUE;
-            maxY = -Float.MAX_VALUE;
-            boolean visible = true;
-            for (int corner = 0; corner < 8; corner++) {
-                double x = (corner & 1) == 0 ? box.minX : box.maxX;
-                double y = (corner & 2) == 0 ? box.minY : box.maxY;
-                double z = (corner & 4) == 0 ? box.minZ : box.maxZ;
-                view.set((float) (x - cameraPos.x), (float) (y - cameraPos.y),
-                        (float) (z - cameraPos.z));
-                view.rotate(rotation);
-                clip.set(view.x, view.y, view.z, 1.0F);
-                projection.transform(clip);
-                if (clip.w <= 0.0001F) {
-                    visible = false;
-                    break;
+        for (int y = 0; y < height; y++) {
+            float windowY = cropY + (y + 0.5F) * cropHeight / height;
+            int row = (int) windowY * main.width;
+            for (int x = 0; x < width; x++) {
+                float windowX = cropX + (x + 0.5F) * cropWidth / width;
+                if (windowX < 0.0F || windowY < 0.0F
+                        || windowX >= main.width || windowY >= main.height) {
+                    continue;
                 }
-                float ndcX = clip.x / clip.w;
-                float ndcY = clip.y / clip.w;
-                float windowX = (ndcX + 1.0F) * 0.5F * main.width;
-                float windowY = (1.0F - ndcY) * 0.5F * main.height;
-                float captureX = (windowX - cropX) * width / cropWidth;
-                float captureY = (windowY - cropY) * height / cropHeight;
-                minX = Math.min(minX, captureX);
-                minY = Math.min(minY, captureY);
-                maxX = Math.max(maxX, captureX);
-                maxY = Math.max(maxY, captureY);
-            }
-            if (!visible || maxX < 0.0F || maxY < 0.0F || minX >= width || minY >= height) {
-                continue;
-            }
-            int left = Math.max(0, (int) Math.floor(minX));
-            int top = Math.max(0, (int) Math.floor(minY));
-            int right = Math.min(width - 1, (int) Math.ceil(maxX));
-            int bottom = Math.min(height - 1, (int) Math.ceil(maxY));
-            for (int y = top; y <= bottom; y++) {
-                for (int x = left; x <= right; x++) {
-                    mask[y * width + x] = 1.0F;
+                float distance = distances[row + (int) windowX];
+                for (float[] rect : rects) {
+                    if (windowX >= rect[0] && windowX <= rect[2]
+                            && windowY >= rect[1] && windowY <= rect[3]
+                            && distance >= rect[4] - 0.75F && distance <= rect[5] + 0.75F) {
+                        mask[y * width + x] = 1.0F;
+                        break;
+                    }
                 }
             }
         }
@@ -437,7 +408,6 @@ public final class CameraCapturePipeline {
                 org.lwjgl.opengl.GL30.GL_READ_FRAMEBUFFER, 0);
         float near = 0.05F;
         float far = (float) minecraft.gameRenderer.getDepthFar();
-        float threshold = 48.0F;
         float[] mask = new float[width * height];
         for (int y = 0; y < height; y++) {
             int sourceY = cropY + (int) ((long) (height - 1 - y) * cropHeight / height);
@@ -445,7 +415,7 @@ public final class CameraCapturePipeline {
                 int sourceX = cropX + (int) ((long) x * cropWidth / width);
                 float depthValue = depth.get(sourceY * sourceWidth + sourceX);
                 float distance = far * near / Math.max(0.000001F, far - depthValue * (far - near));
-                mask[y * width + x] = distance <= threshold ? 1.0F : 0.0F;
+                mask[y * width + x] = distance;
             }
         }
         return mask;
