@@ -276,7 +276,7 @@ public final class CameraCapturePipeline {
      */
     public void afterWorldRender() {
         PendingCapture capture = this.pending;
-        if (capture == null) {
+        if (capture == null || this.capturing) {
             return;
         }
         Minecraft minecraft = Minecraft.getInstance();
