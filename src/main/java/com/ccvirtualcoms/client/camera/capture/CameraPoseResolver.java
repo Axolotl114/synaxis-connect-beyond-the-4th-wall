@@ -81,20 +81,18 @@ public final class CameraPoseResolver {
         float pitch = clampPitch((float) angles[1]);
         float roll = CameraTransformMath.normalizeYaw((float) angles[2]);
 
-        double clearance = lensClearance();
-        Direction lens = facing == null ? Direction.NORTH : facing;
-        Vector3d lensAxis = new Vector3d(lens.getStepX(), lens.getStepY(), lens.getStepZ());
-
+        // Eye position = block centre. The configured offset is expressed in the LENS frame
+        // (camera rotation applied to it), not in the sub-level/world frame.
+        Quaterniond lensRotation = CameraTransformMath.cameraRotation(yaw, pitch, roll);
         Vector3d localPoint = new Vector3d(
                 pos.getX() + 0.5D,
                 pos.getY() + 0.5D,
                 pos.getZ() + 0.5D);
         if (config != null) {
-            localPoint.add(config.offsetX(), config.offsetY(), config.offsetZ());
+            Vector3d offset = new Vector3d(config.offsetX(), config.offsetY(), config.offsetZ())
+                    .rotate(lensRotation);
+            localPoint.add(offset);
         }
-        // Camera position = centre of the facing face, pushed slightly out of the own block so its
-        // inner faces can never appear in the captured image.
-        localPoint.add(lensAxis.mul(clearance + LENS_EPSILON));
 
         SubLevelSnapshot subLevel = safeSnapshot(level, pos, partialTick);
         if (subLevel == null) {
