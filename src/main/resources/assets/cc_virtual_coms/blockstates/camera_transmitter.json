@@ -1,27 +1,5 @@
 {
   "variants": {
-    "facing=down": {
-      "model": "cc_virtual_coms:block/camera/base",
-      "x": 90
-    },
-    "facing=east": {
-      "model": "cc_virtual_coms:block/camera/base",
-      "y": 90
-    },
-    "facing=north": {
-      "model": "cc_virtual_coms:block/camera/base"
-    },
-    "facing=south": {
-      "model": "cc_virtual_coms:block/camera/base",
-      "y": 180
-    },
-    "facing=up": {
-      "model": "cc_virtual_coms:block/camera/base",
-      "x": 270
-    },
-    "facing=west": {
-      "model": "cc_virtual_coms:block/camera/base",
-      "y": 270
-    }
+    "": { "model": "cc_virtual_coms:block/camera/empty" }
   }
 }

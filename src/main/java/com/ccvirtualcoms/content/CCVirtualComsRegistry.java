@@ -59,6 +59,7 @@ public final class CCVirtualComsRegistry {
             () -> new CameraTransmitterBlock(BlockBehaviour.Properties.of()
                     .mapColor(MapColor.METAL)
                     .strength(1.5F)
+                    .noOcclusion()
                     .sound(net.minecraft.world.level.block.SoundType.METAL)));
 
     public static final DeferredItem<BlockItem> CAMERA_TRANSMITTER_ITEM = ITEMS.register(

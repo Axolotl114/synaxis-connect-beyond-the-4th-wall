@@ -361,6 +361,12 @@ public final class CameraCapturePipeline {
     }
 
     /** {@code true} while the pipeline is rendering its own camera frame. */
+    /** Key of the camera whose view is being rendered right now, or {@code -1}. */
+    public long activeCaptureKey() {
+        PendingCapture capture = this.pending;
+        return capture == null ? -1L : capture.camera.key();
+    }
+
     public boolean isCapturing() {
         return this.capturing;
     }

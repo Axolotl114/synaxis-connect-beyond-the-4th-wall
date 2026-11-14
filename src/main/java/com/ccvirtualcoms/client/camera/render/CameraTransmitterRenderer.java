@@ -63,12 +63,17 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
         if (minecraft.level == null) {
             return;
         }
+        if (com.ccvirtualcoms.client.camera.capture.CameraCapturePipeline.get()
+                .activeCaptureKey() == camera.getBlockPos().asLong()) {
+            return; // never render the camera's own body into its own view
+        }
         resolveModels(minecraft);
         BlockState state = camera.getBlockState();
         Direction facing = state.getOptionalValue(CameraTransmitterBlock.FACING).orElse(Direction.NORTH);
 
         pose.pushPose();
         applyFacing(pose, facing);
+        draw("base", pose, buffers, state, light, packedOverlay);
 
         double rawYaw = camera.eulerAngles()[0];
         double rawPitch = camera.eulerAngles()[1];
