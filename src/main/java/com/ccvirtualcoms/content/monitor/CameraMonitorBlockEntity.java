@@ -16,6 +16,14 @@ public class CameraMonitorBlockEntity extends BlockEntity {
 
     private BlockPos cameraPos;
     private boolean enabled = true;
+    private double projectorWidth = 3.0D;
+    private double projectorHeight = 2.0D;
+    private double offsetX;
+    private double offsetY;
+    private double offsetZ;
+    private double yawDegrees;
+    private double pitchDegrees;
+    private int opacity = 100;
 
     private boolean screenDirty = true;
     private BlockPos screenMaster;
@@ -41,6 +49,31 @@ public class CameraMonitorBlockEntity extends BlockEntity {
 
     public boolean enabled() {
         return this.enabled;
+    }
+
+    public double projectorWidth() { return this.projectorWidth; }
+    public double projectorHeight() { return this.projectorHeight; }
+    public double offsetX() { return this.offsetX; }
+    public double offsetY() { return this.offsetY; }
+    public double offsetZ() { return this.offsetZ; }
+    public double yawDegrees() { return this.yawDegrees; }
+    public double pitchDegrees() { return this.pitchDegrees; }
+    public int opacity() { return this.opacity; }
+
+    public void applyTransform(double width, double height, double dx, double dy, double dz,
+                               double yaw, double pitch, int alpha) {
+        this.projectorWidth = Math.max(0.4D, Math.min(64.0D, width));
+        this.projectorHeight = Math.max(0.3D, Math.min(36.0D, height));
+        this.offsetX = Math.max(-64.0D, Math.min(64.0D, dx));
+        this.offsetY = Math.max(-64.0D, Math.min(64.0D, dy));
+        this.offsetZ = Math.max(-64.0D, Math.min(64.0D, dz));
+        this.yawDegrees = yaw;
+        this.pitchDegrees = Math.max(-90.0D, Math.min(90.0D, pitch));
+        this.opacity = Math.max(0, Math.min(100, alpha));
+        this.setChanged();
+        if (this.level != null) {
+            this.level.sendBlockUpdated(this.worldPosition, this.getBlockState(), this.getBlockState(), 3);
+        }
     }
 
     public void apply(BlockPos camera, boolean on) {
@@ -150,6 +183,14 @@ public class CameraMonitorBlockEntity extends BlockEntity {
             tag.putLong("CameraPos", this.cameraPos.asLong());
         }
         tag.putBoolean("Enabled", this.enabled);
+        tag.putDouble("ScreenWidth", this.projectorWidth);
+        tag.putDouble("ScreenHeight", this.projectorHeight);
+        tag.putDouble("OffsetX", this.offsetX);
+        tag.putDouble("OffsetY", this.offsetY);
+        tag.putDouble("OffsetZ", this.offsetZ);
+        tag.putDouble("Yaw", this.yawDegrees);
+        tag.putDouble("Pitch", this.pitchDegrees);
+        tag.putInt("Opacity", this.opacity);
     }
 
     @Override
@@ -157,6 +198,14 @@ public class CameraMonitorBlockEntity extends BlockEntity {
         super.loadAdditional(tag, registries);
         this.cameraPos = tag.contains("CameraPos") ? BlockPos.of(tag.getLong("CameraPos")) : null;
         this.enabled = !tag.contains("Enabled") || tag.getBoolean("Enabled");
+        this.projectorWidth = tag.contains("ScreenWidth") ? tag.getDouble("ScreenWidth") : 3.0D;
+        this.projectorHeight = tag.contains("ScreenHeight") ? tag.getDouble("ScreenHeight") : 2.0D;
+        this.offsetX = tag.contains("OffsetX") ? tag.getDouble("OffsetX") : 0.0D;
+        this.offsetY = tag.contains("OffsetY") ? tag.getDouble("OffsetY") : 0.0D;
+        this.offsetZ = tag.contains("OffsetZ") ? tag.getDouble("OffsetZ") : 0.0D;
+        this.yawDegrees = tag.contains("Yaw") ? tag.getDouble("Yaw") : 0.0D;
+        this.pitchDegrees = tag.contains("Pitch") ? tag.getDouble("Pitch") : 0.0D;
+        this.opacity = tag.contains("Opacity") ? tag.getInt("Opacity") : 100;
         this.screenDirty = true;
     }
 

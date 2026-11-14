@@ -5,15 +5,13 @@ import com.ccvirtualcoms.camera.CameraConfig;
 import com.ccvirtualcoms.camera.api.CameraFrame;
 import com.ccvirtualcoms.client.camera.capture.CameraCaptureRuntime;
 import com.ccvirtualcoms.client.camera.capture.CapturedCamera;
+import com.ccvirtualcoms.content.monitor.CameraMonitorBlock;
 import com.ccvirtualcoms.content.monitor.CameraMonitorBlockEntity;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import java.util.ArrayDeque;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -21,21 +19,16 @@ import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.client.renderer.texture.DynamicTexture;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.Property;
 import org.joml.Matrix4f;
+import com.mojang.math.Axis;
 
-/** Draws the selected camera image onto the adjacent CC advanced monitor wall. */
+/** Draws the projector's floating camera screen in the air. */
 public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorBlockEntity> {
 
-    private static final int TEX = 256;
-    private static final ResourceLocation MONITOR =
-            ResourceLocation.fromNamespaceAndPath("computercraft", "monitor_advanced");
+    private static final int TEX = 512;
     private static final Map<Long, DynamicTexture> TEXTURES = new HashMap<>();
     private static final Map<Long, Long> FRAMES = new HashMap<>();
 
@@ -43,205 +36,85 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
     }
 
     @Override
-    public void render(CameraMonitorBlockEntity receiver, float partialTick, PoseStack pose,
+    public void render(CameraMonitorBlockEntity projector, float partialTick, PoseStack pose,
                        MultiBufferSource buffers, int light, int overlay) {
-        drawOverlay(receiver, pose, buffers, overlay);
-    }
-
-    /** Draws the receiver's camera image onto its adjacent CC monitor wall. */
-    public static void drawOverlay(CameraMonitorBlockEntity receiver, PoseStack pose,
-                                   MultiBufferSource buffers, int overlay) {
-        Level level = receiver.getLevel();
-        if (level == null || !receiver.enabled() || receiver.cameraPos() == null) {
+        if (!projector.enabled() || projector.cameraPos() == null) {
             return;
         }
-        BlockPos monitorPos = findMonitor(level, receiver.getBlockPos());
-        if (monitorPos == null) {
-            return;
-        }
-        BlockState state = level.getBlockState(monitorPos);
-        Direction facing = facingOf(state);
-        int[] wall = wallBounds(level, monitorPos, state, facing);
-        int width = wall[0];
-        int height = wall[1];
-        BlockPos origin = new BlockPos(wall[2], wall[3], wall[4]);
-        int[] right = {wall[5], 0, wall[6]};
-        CapturedCamera camera = CameraCaptureRuntime.get().camera(receiver.cameraPos().asLong());
+        CapturedCamera camera = CameraCaptureRuntime.get().camera(projector.cameraPos().asLong());
         CameraFrame frame = camera == null ? null : camera.latestFrame();
         CameraConfig config = camera == null ? CameraConfig.DEFAULT : camera.config();
-        ResourceLocation texture = upload(receiver.getBlockPos(), frame, config, width, height);
+        float width = (float) projector.projectorWidth();
+        float height = (float) projector.projectorHeight();
+        ResourceLocation texture = upload(projector, frame, config, width / height, projector.opacity());
+        BlockState state = projector.getBlockState();
+        Direction facing = state.getOptionalValue(CameraMonitorBlock.FACING).orElse(Direction.SOUTH);
         pose.pushPose();
-        pose.translate(origin.getX() - receiver.getBlockPos().getX(),
-                origin.getY() - receiver.getBlockPos().getY(),
-                origin.getZ() - receiver.getBlockPos().getZ());
+        pose.translate(0.5F + (float) projector.offsetX(),
+                0.5F + (float) projector.offsetY(),
+                0.5F + (float) projector.offsetZ());
+        // block facing: the screen's local +Z is the outward normal
+        switch (facing) {
+            case SOUTH -> { }
+            case NORTH -> pose.mulPose(Axis.YP.rotationDegrees(180.0F));
+            case EAST -> pose.mulPose(Axis.YP.rotationDegrees(-90.0F));
+            case WEST -> pose.mulPose(Axis.YP.rotationDegrees(90.0F));
+            default -> { }
+        }
+        pose.mulPose(Axis.YP.rotationDegrees((float) projector.yawDegrees()));
+        pose.mulPose(Axis.XP.rotationDegrees((float) projector.pitchDegrees()));
         Matrix4f matrix = pose.last().pose();
-        VertexConsumer consumer = buffers.getBuffer(RenderType.text(texture));
+        float halfW = width / 2.0F;
+        float halfH = height / 2.0F;
+        VertexConsumer consumer = buffers.getBuffer(RenderType.entityTranslucent(texture));
         int fullLight = LightTexture.FULL_BRIGHT;
-        // One big quad cover the whole wall, 0.01 block outside the monitor front surface.
-        float faceX = facing.getStepX() > 0 ? 1.0F : 0.0F;
-        float faceY = facing.getStepY() > 0 ? 1.0F : 0.0F;
-        float faceZ = facing.getStepZ() > 0 ? 1.0F : 0.0F;
-        float ox = faceX + facing.getStepX() * 0.01F;
-        float oy = faceY + facing.getStepY() * 0.01F;
-        float oz = faceZ + facing.getStepZ() * 0.01F;
-        float rx = right[0];
-        float rz = right[2];
-        float w = width;
-        float h = height;
-        // bottom-left, bottom-right, top-right, top-left (viewer looking at the screen)
-        vertex(consumer, matrix, ox, oy, oz, 0.0F, 1.0F, fullLight, overlay);
-        vertex(consumer, matrix, ox + rx * w, oy, oz + rz * w, 1.0F, 1.0F, fullLight, overlay);
-        vertex(consumer, matrix, ox + rx * w, oy + h, oz + rz * w, 1.0F, 0.0F, fullLight, overlay);
-        vertex(consumer, matrix, ox, oy + h, oz, 0.0F, 0.0F, fullLight, overlay);
+        vertex(consumer, matrix, -halfW, halfH, 0.0F, 0.0F, 0.0F, fullLight, overlay);
+        vertex(consumer, matrix, halfW, halfH, 0.0F, 1.0F, 0.0F, fullLight, overlay);
+        vertex(consumer, matrix, halfW, -halfH, 0.0F, 1.0F, 1.0F, fullLight, overlay);
+        vertex(consumer, matrix, -halfW, -halfH, 0.0F, 0.0F, 1.0F, fullLight, overlay);
         pose.popPose();
     }
 
-    private static int[] wallBounds(Level level, BlockPos start, BlockState startState,
-                                    Direction facing) {
-        Set<BlockPos> seen = new HashSet<>();
-        ArrayDeque<BlockPos> queue = new ArrayDeque<>();
-        queue.add(start);
-        seen.add(start);
-        int minA = Integer.MAX_VALUE;
-        int maxA = Integer.MIN_VALUE;
-        int minB = Integer.MAX_VALUE;
-        int maxB = Integer.MIN_VALUE;
-        Direction right = facing.getCounterClockWise();
-        while (!queue.isEmpty() && seen.size() < 256) {
-            BlockPos pos = queue.poll();
-            int a = pos.getX() * right.getStepX() + pos.getZ() * right.getStepZ();
-            minA = Math.min(minA, a);
-            maxA = Math.max(maxA, a);
-            minB = Math.min(minB, pos.getY());
-            maxB = Math.max(maxB, pos.getY());
-            for (Direction direction : new Direction[]{Direction.UP, Direction.DOWN, right,
-                    right.getOpposite()}) {
-                BlockPos next = pos.relative(direction);
-                if (seen.contains(next)) {
-                    continue;
-                }
-                BlockState nextState = level.getBlockState(next);
-                if (BuiltInRegistries.BLOCK.getKey(nextState.getBlock()).equals(MONITOR)
-                        && nextState.getBlock() == startState.getBlock()) {
-                    seen.add(next);
-                    queue.add(next);
-                }
-            }
-        }
-        BlockPos origin = start;
-        for (BlockPos pos : seen) {
-            int a = pos.getX() * right.getStepX() + pos.getZ() * right.getStepZ();
-            if (a == minA && pos.getY() == minB) {
-                origin = pos;
-                break;
-            }
-        }
-        return new int[]{maxA - minA + 1, maxB - minB + 1, origin.getX(), origin.getY(),
-                origin.getZ(), right.getStepX(), right.getStepZ()};
-    }
-
-    private static BlockPos findMonitor(Level level, BlockPos receiverPos) {
-        for (Direction direction : Direction.values()) {
-            BlockPos next = receiverPos.relative(direction);
-            if (BuiltInRegistries.BLOCK.getKey(level.getBlockState(next).getBlock()).equals(MONITOR)) {
-                return next;
-            }
-        }
-        return null;
-    }
-
-    private static @org.jetbrains.annotations.Nullable Direction facingOf(BlockState state) {
-        for (Property<?> property : state.getProperties()) {
-            if (property.getName().equals("facing")
-                    && property.getValueClass() == Direction.class) {
-                try {
-                    Object value = state.getValue((Property) property);
-                    if (value instanceof Direction direction) {
-                        return direction;
-                    }
-                } catch (RuntimeException ignored) {
-                }
-            }
-        }
-        return Direction.NORTH;
-    }
-
-    /** Returns {width, height, column, row} of the monitor wall. */
-    private static int[] measureWall(Level level, BlockPos start, BlockState startState,
-                                     Direction facing) {
-        Set<BlockPos> seen = new HashSet<>();
-        ArrayDeque<BlockPos> queue = new ArrayDeque<>();
-        queue.add(start);
-        seen.add(start);
-        int minA = Integer.MAX_VALUE;
-        int maxA = Integer.MIN_VALUE;
-        int minB = Integer.MAX_VALUE;
-        int maxB = Integer.MIN_VALUE;
-        Direction right = facing.getClockWise();
-        while (!queue.isEmpty() && seen.size() < 256) {
-            BlockPos pos = queue.poll();
-            int a = pos.getX() * right.getStepX() + pos.getZ() * right.getStepZ();
-            minA = Math.min(minA, a);
-            maxA = Math.max(maxA, a);
-            minB = Math.min(minB, pos.getY());
-            maxB = Math.max(maxB, pos.getY());
-            for (Direction direction : new Direction[]{Direction.UP, Direction.DOWN, right,
-                    right.getOpposite()}) {
-                BlockPos next = pos.relative(direction);
-                if (seen.contains(next)) {
-                    continue;
-                }
-                BlockState nextState = level.getBlockState(next);
-                if (BuiltInRegistries.BLOCK.getKey(nextState.getBlock()).equals(MONITOR)
-                        && nextState.getBlock() == startState.getBlock()) {
-                    seen.add(next);
-                    queue.add(next);
-                }
-            }
-        }
-        int a = start.getX() * right.getStepX() + start.getZ() * right.getStepZ();
-        return new int[]{maxA - minA + 1, maxB - minB + 1, a - minA, maxB - start.getY()};
-    }
-
-    private static ResourceLocation upload(BlockPos key, CameraFrame frame, CameraConfig config,
-                                          int screenWidth, int screenHeight) {
-        long id = key.asLong();
-        ResourceLocation textureId = ResourceLocation.fromNamespaceAndPath(CCVirtualComs.MOD_ID,
-                "monitor/" + Long.toHexString(id));
-        DynamicTexture texture = TEXTURES.get(id);
+    private static ResourceLocation upload(CameraMonitorBlockEntity projector, CameraFrame frame,
+                                          CameraConfig config, double aspect, int opacity) {
+        long key = projector.getBlockPos().asLong();
+        ResourceLocation id = ResourceLocation.fromNamespaceAndPath(CCVirtualComs.MOD_ID,
+                "projector/" + Long.toHexString(key));
+        DynamicTexture texture = TEXTURES.get(key);
         if (texture == null) {
             texture = new DynamicTexture(TEX, TEX, true);
-            Minecraft.getInstance().getTextureManager().register(textureId, texture);
-            TEXTURES.put(id, texture);
-            FRAMES.put(id, Long.MIN_VALUE);
+            Minecraft.getInstance().getTextureManager().register(id, texture);
+            TEXTURES.put(key, texture);
+            FRAMES.put(key, Long.MIN_VALUE);
         }
-        long sequence = frame == null ? -1L : frame.sequence();
-        Long previous = FRAMES.get(id);
-        if (previous == null || previous != sequence) {
-            FRAMES.put(id, sequence);
+        long signature = (frame == null ? -1L : frame.sequence()) * 1000L + opacity;
+        Long previous = FRAMES.get(key);
+        if (previous == null || previous != signature) {
+            FRAMES.put(key, signature);
             NativeImage image = texture.getPixels();
             if (image != null) {
-                fill(image, frame, config, screenWidth, screenHeight);
+                fill(image, frame, config, aspect, opacity);
                 texture.upload();
             }
         }
-        return textureId;
+        return id;
     }
 
     private static void fill(NativeImage image, CameraFrame frame, CameraConfig config,
-                             int screenWidth, int screenHeight) {
+                             double aspect, int opacity) {
+        int alpha = Math.max(0, Math.min(255, (int) Math.round(opacity * 2.55D)));
+        int background = alpha << 24;
         for (int y = 0; y < TEX; y++) {
             for (int x = 0; x < TEX; x++) {
-                image.setPixelRGBA(x, y, 0xFF000000);
+                image.setPixelRGBA(x, y, background);
             }
         }
         if (frame == null) {
             return;
         }
-        double screenAspect = (double) screenWidth / (double) screenHeight;
         double imageAspect = (double) frame.width() / (double) frame.height();
-        double drawWidth = imageAspect > screenAspect ? 1.0D : imageAspect / screenAspect;
-        double drawHeight = imageAspect > screenAspect ? screenAspect / imageAspect : 1.0D;
+        double drawWidth = imageAspect > aspect ? 1.0D : imageAspect / aspect;
+        double drawHeight = imageAspect > aspect ? aspect / imageAspect : 1.0D;
         int offsetX = (int) Math.round((1.0D - drawWidth) * TEX / 2.0D);
         int offsetY = (int) Math.round((1.0D - drawHeight) * TEX / 2.0D);
         int width = Math.max(1, (int) Math.round(drawWidth * TEX));
@@ -281,7 +154,7 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
                         r = g = b = luma;
                     }
                 }
-                image.setPixelRGBA(offsetX + x, offsetY + y, 0xFF000000 | (b << 16) | (g << 8) | r);
+                image.setPixelRGBA(offsetX + x, offsetY + y, (alpha << 24) | (b << 16) | (g << 8) | r);
             }
         }
     }

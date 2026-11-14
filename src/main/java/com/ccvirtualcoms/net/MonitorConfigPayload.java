@@ -14,7 +14,9 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /** Client to server: set the camera and enable state of a monitor wall. */
-public record MonitorConfigPayload(BlockPos pos, boolean hasCamera, long cameraKey, boolean enabled)
+public record MonitorConfigPayload(BlockPos pos, boolean hasCamera, long cameraKey, boolean enabled,
+                                   double width, double height, double offsetX, double offsetY,
+                                   double offsetZ, double yaw, double pitch, int opacity)
         implements CustomPacketPayload {
 
     public static final CustomPacketPayload.Type<MonitorConfigPayload> TYPE =
@@ -29,11 +31,21 @@ public record MonitorConfigPayload(BlockPos pos, boolean hasCamera, long cameraK
         buffer.writeBoolean(payload.hasCamera());
         buffer.writeLong(payload.cameraKey());
         buffer.writeBoolean(payload.enabled());
+        buffer.writeDouble(payload.width());
+        buffer.writeDouble(payload.height());
+        buffer.writeDouble(payload.offsetX());
+        buffer.writeDouble(payload.offsetY());
+        buffer.writeDouble(payload.offsetZ());
+        buffer.writeDouble(payload.yaw());
+        buffer.writeDouble(payload.pitch());
+        buffer.writeVarInt(payload.opacity());
     }
 
     private static MonitorConfigPayload decode(RegistryFriendlyByteBuf buffer) {
         return new MonitorConfigPayload(BlockPos.STREAM_CODEC.decode(buffer), buffer.readBoolean(),
-                buffer.readLong(), buffer.readBoolean());
+                buffer.readLong(), buffer.readBoolean(), buffer.readDouble(), buffer.readDouble(),
+                buffer.readDouble(), buffer.readDouble(), buffer.readDouble(), buffer.readDouble(),
+                buffer.readDouble(), buffer.readVarInt());
     }
 
     public void handle(IPayloadContext context) {
@@ -53,6 +65,8 @@ public record MonitorConfigPayload(BlockPos pos, boolean hasCamera, long cameraK
             CameraMonitorBlockEntity master = monitor.master();
             CameraMonitorBlockEntity target = master == null ? monitor : master;
             target.apply(this.hasCamera ? BlockPos.of(this.cameraKey) : null, this.enabled);
+            target.applyTransform(this.width, this.height, this.offsetX, this.offsetY, this.offsetZ,
+                    this.yaw, this.pitch, this.opacity);
         });
     }
 

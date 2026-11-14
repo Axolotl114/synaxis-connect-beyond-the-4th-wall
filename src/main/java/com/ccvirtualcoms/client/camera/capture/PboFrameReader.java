@@ -183,7 +183,12 @@ public final class PboFrameReader implements AutoCloseable {
 
     /** Converts bottom-up RGBA bytes into a top-first RGBA {@link CameraFrame}. */
     private CameraFrame flipToFrame(ByteBuffer mapped, int sequence, long captureNanos) {
-        byte[] rgba = new byte[this.byteSize];
+        byte[] rgba = this.framePool[this.framePoolCursor];
+        if (rgba == null || rgba.length != this.byteSize) {
+            rgba = new byte[this.byteSize];
+            this.framePool[this.framePoolCursor] = rgba;
+        }
+        this.framePoolCursor = (this.framePoolCursor + 1) % this.framePool.length;
         int rowBytes = this.width * 4;
         for (int y = 0; y < this.height; y++) {
             int sourceRow = (this.height - 1 - y) * rowBytes;

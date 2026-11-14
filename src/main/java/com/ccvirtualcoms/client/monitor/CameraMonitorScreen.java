@@ -21,6 +21,8 @@ public class CameraMonitorScreen extends Screen {
     private final List<BlockPos> cameras = new ArrayList<>();
     private int selected = -1;
     private boolean enabled;
+    private final net.minecraft.client.gui.components.EditBox[] fields =
+            new net.minecraft.client.gui.components.EditBox[8];
     private BlockPos masterPos;
 
     public CameraMonitorScreen(CameraMonitorBlockEntity monitor) {
@@ -50,6 +52,24 @@ public class CameraMonitorScreen extends Screen {
                 Component.empty(), () -> this.enabled,
                 () -> Component.translatable("cc_virtual_coms.monitor.on"),
                 () -> Component.translatable("cc_virtual_coms.monitor.off"), this::toggle));
+        String[] values = {
+                Double.toString(this.monitor.projectorWidth()),
+                Double.toString(this.monitor.projectorHeight()),
+                Double.toString(this.monitor.offsetX()),
+                Double.toString(this.monitor.offsetY()),
+                Double.toString(this.monitor.offsetZ()),
+                Double.toString(this.monitor.yawDegrees()),
+                Double.toString(this.monitor.pitchDegrees()),
+                Integer.toString(this.monitor.opacity())
+        };
+        for (int i = 0; i < this.fields.length; i++) {
+            net.minecraft.client.gui.components.EditBox box = new net.minecraft.client.gui.components.EditBox(
+                    this.font, centerX - 100 + (i % 2) * 102, y + 96 + (i / 2) * 20, 98, 16,
+                    Component.empty());
+            box.setValue(values[i]);
+            this.fields[i] = box;
+            this.addRenderableWidget(box);
+        }
         this.addRenderableWidget(Button.builder(Component.translatable("gui.done"),
                 button -> this.onClose()).bounds(centerX - 100, y + 60, 200, 20).build());
     }
@@ -74,12 +94,35 @@ public class CameraMonitorScreen extends Screen {
         this.send();
     }
 
+    private double field(int index, double fallback) {
+        try {
+            return Double.parseDouble(this.fields[index].getValue());
+        } catch (RuntimeException failure) {
+            return fallback;
+        }
+    }
+
     private void send() {
         BlockPos camera = this.selected >= 0 && this.selected < this.cameras.size()
                 ? this.cameras.get(this.selected) : null;
+        double width = this.field(0, this.monitor.projectorWidth());
+        double height = this.field(1, this.monitor.projectorHeight());
         net.neoforged.neoforge.network.PacketDistributor.sendToServer(
                 new com.ccvirtualcoms.net.MonitorConfigPayload(this.masterPos, camera != null,
-                        camera == null ? 0L : camera.asLong(), this.enabled));
+                        camera == null ? 0L : camera.asLong(), this.enabled,
+                        width, height,
+                        this.field(2, this.monitor.offsetX()),
+                        this.field(3, this.monitor.offsetY()),
+                        this.field(4, this.monitor.offsetZ()),
+                        this.field(5, this.monitor.yawDegrees()),
+                        this.field(6, this.monitor.pitchDegrees()),
+                        (int) Math.round(this.field(7, this.monitor.opacity()))));
+    }
+
+    @Override
+    public void onClose() {
+        this.send();
+        super.onClose();
     }
 
     @Override
@@ -91,6 +134,11 @@ public class CameraMonitorScreen extends Screen {
         graphics.fill(x0, y0, x0 + 240, y0 + 24, 0xFF2E2E36);
         graphics.drawString(this.font, this.title, x0 + 8, y0 + 8, 0xFFF2F2F5, false);
         super.render(graphics, mouseX, mouseY, partialTick);
+        String[] labels = {"W", "H", "X", "Y", "Z", "Yaw", "Pitch", "Alpha"};
+        for (int i = 0; i < this.fields.length && this.fields[i] != null; i++) {
+            graphics.drawString(this.font, labels[i], this.fields[i].getX() + 1,
+                    this.fields[i].getY() - 9, 0xFFC2C2CA, false);
+        }
         graphics.drawString(this.font, Component.translatable("cc_virtual_coms.monitor.hint"),
                 x0 + 8, y0 + 112, 0xFFC2C2CA, false);
     }
