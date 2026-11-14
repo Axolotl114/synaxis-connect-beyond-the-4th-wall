@@ -3,7 +3,7 @@
 > 用途：把本模组的后续开发交接给新的 agent team。
 > 本文档只包含两部分：**一、项目架构**；**二、交接提示词（可直接粘贴使用）**。
 >
-> 仓库：`E:\minecraft_aimods\virtual_coms` ｜ GitHub：`Axolotl114/cc_virtual_coms`（master = `d47b4cc`，47 个受控文件）
+> 仓库：`E:\minecraft_aimods\virtual_coms` ｜ GitHub：`Axolotl114/synaxis-connect-beyond-the-4th-wall`（master 最新）
 
 ---
 
@@ -228,7 +228,7 @@
 
 项目:CC Synaxis Virtual Coms(v0.0.1)
 路径:E:\minecraft_aimods\virtual_coms
-远程:https://github.com/Axolotl114/cc_virtual_coms(master 最新)
+远程:https://github.com/Axolotl114/synaxis-connect-beyond-the-4th-wall(master 最新)
 作用:一块 Synaxis Cimulink 电路板,把游戏电路、CC:Tweaked 电脑、游戏外 Python 程序
       通过本地 TCP(127.0.0.1:25585)桥接起来。三方共享同一份端子表。
 
