@@ -1,3 +1,3 @@
 {
-  "parent": "create:block/redstone_link/receiver"
+  "parent": "cc_virtual_coms:block/camera_monitor"
 }
