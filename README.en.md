@@ -222,31 +222,12 @@ build needs no mod repository access, and they are not bundled into the output.
 
 ## Credits
 
-This mod's display name is **Synaxis: Connect beyond the 4th Wall**; the word
-"Synaxis" is a tribute to the upstream **Synaxis** mod.
+This mod's display name is **Synaxis: Connect beyond the 4th Wall**.
 
-- **GUI textures** are reused from **Synaxis** by **Rew1nd** (modId `synaxis`,
-  licensed "All Rights Reserved") **with the explicit permission of the author**.
-  Copyright remains with the original author; these textures are not covered by
-  this mod's MIT license.
-- **The block model and block textures** (`base` / `pins` / `chip`) are
-  derivative works redrawn and recoloured from Synaxis reference material. They
-  differ substantially from the originals in `synaxis-1.4.3.jar` (per-pixel
-  comparison: `pins` 256/256 = **100%** (fully redrawn), `base` 251/256 =
-  **98.05%**, `chip` 1055/4096 = **25.76%**); they are not the original files.
-- **New blocks** such as the **camera transmitter** (`camera_transmitter`) do
-  **not** reuse Synaxis block models or Synaxis block textures: their block
-  model references the vanilla `minecraft:block/observer` by resource location
-  only, and no extra block textures are shipped.
 - Built on **Synaxis**, **CC:Tweaked** and **Create**.
 - Dependency chain: **Sable** / **LDLib2** / **Create Aeronautics**.
-
-> The full legal statement for third-party art assets is in [LICENSE](LICENSE).
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
 
-Note that third-party art assets (the Synaxis GUI textures and the block
-textures derived from Synaxis) are **not** covered by the MIT license; see the
-third-party art assets section of [LICENSE](LICENSE).
