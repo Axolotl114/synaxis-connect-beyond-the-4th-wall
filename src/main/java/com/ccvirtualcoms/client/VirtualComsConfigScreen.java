@@ -178,7 +178,7 @@ public class VirtualComsConfigScreen extends Screen {
         int y = this.top + 8;
 
         // ---- header: serial port id -------------------------------------
-        this.comIdBox = new EditBox(this.font, x + 100, y, 120, 18,
+        this.comIdBox = new EditBox(this.font, x + 100, y, 120, 16,
                 Component.translatable("cc_virtual_coms.screen.com"));
         this.comIdBox.setMaxLength(32);
         this.comIdBox.setValue(this.comIdDraft);
@@ -255,7 +255,7 @@ public class VirtualComsConfigScreen extends Screen {
 
         // ---- add terminal row --------------------------------------------
         int addY = this.top + 200;
-        this.addNameBox = new EditBox(this.font, x, addY, 100, 18,
+        this.addNameBox = new EditBox(this.font, x, addY, 100, 16,
                 Component.translatable("cc_virtual_coms.screen.name"));
         this.addNameBox.setMaxLength(48);
         this.addNameBox.setValue(this.addNameDraft);
@@ -391,14 +391,14 @@ public class VirtualComsConfigScreen extends Screen {
         guiGraphics.fill(x0, y0, x1, y1, COLOR_PANEL);
         // white input fields (the edit boxes render borderless text on top)
         if (this.comIdBox != null) {
-            guiGraphics.fill(this.comIdBox.getX() - 3, this.comIdBox.getY() - 2,
+            guiGraphics.fill(this.comIdBox.getX() - 3, this.comIdBox.getY() - 1,
                     this.comIdBox.getX() + this.comIdBox.getWidth() + 3,
-                    this.comIdBox.getY() + this.comIdBox.getHeight() + 2, 0xFFFFFFFF);
+                    this.comIdBox.getY() + this.comIdBox.getHeight() + 1, 0xFFFFFFFF);
         }
         if (this.addNameBox != null) {
-            guiGraphics.fill(this.addNameBox.getX() - 3, this.addNameBox.getY() - 2,
+            guiGraphics.fill(this.addNameBox.getX() - 3, this.addNameBox.getY() - 1,
                     this.addNameBox.getX() + this.addNameBox.getWidth() + 3,
-                    this.addNameBox.getY() + this.addNameBox.getHeight() + 2, 0xFFFFFFFF);
+                    this.addNameBox.getY() + this.addNameBox.getHeight() + 1, 0xFFFFFFFF);
         }
         guiGraphics.fill(x0, y0, x1, y0 + 1, COLOR_BORDER);
         guiGraphics.fill(x0, y1 - 1, x1, y1, COLOR_BORDER);

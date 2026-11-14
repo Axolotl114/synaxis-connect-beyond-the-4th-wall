@@ -86,6 +86,9 @@ public final class CameraCapturePipeline {
     private PendingCapture pending;
     private boolean capturing;
     private boolean savedRenderHand;
+    private com.mojang.blaze3d.pipeline.TextureTarget captureTarget;
+    private int captureWidth;
+    private int captureHeight;
     private int captureFov;
     private int loggedCaptureFov = -1;
     private boolean savedBobView;
@@ -220,19 +223,15 @@ public final class CameraCapturePipeline {
             return;
         }
         long now = System.nanoTime();
-        // Adaptive capture rate: stream at 30 fps only while somebody watches (MJPEG/DirectShow),
-        // otherwise idle at 5 fps so an unwatched camera does not keep re-rendering the world.
         boolean watched = com.ccvirtualcoms.client.camera.stream.CameraStreamService.get()
                 .viewerCount() > 0L;
-        long captureInterval = watched
-                ? STREAMING_CAPTURE_INTERVAL_NANOS
-                : IDLE_CAPTURE_INTERVAL_NANOS;
+        long captureInterval = watched ? STREAMING_CAPTURE_INTERVAL_NANOS : IDLE_CAPTURE_INTERVAL_NANOS;
         if (now - this.lastCaptureNanos < captureInterval) {
             return;
         }
         CapturedCamera best = null;
         Session bestSession = null;
-        Set<Long> alive = new HashSet<>();
+        java.util.Set<Long> alive = new java.util.HashSet<>();
         for (CapturedCamera camera : CameraCaptureRuntime.get().cameras()) {
             alive.add(camera.key());
             Session session = this.sessions.computeIfAbsent(camera.key(), Session::new);
@@ -258,42 +257,22 @@ public final class CameraCapturePipeline {
         if (!this.budgetAllows(now, resolution)) {
             bestSession.droppedFrames++;
             this.drops++;
-            bestSession.detail = "frame budget exhausted; capture dropped";
-            if (now - this.lastBudgetLogNanos > BUDGET_LOG_INTERVAL_NANOS) {
-                this.lastBudgetLogNanos = now;
-                CCVirtualComs.LOGGER.warn(
-                        "[camera] Readback budget exhausted ({} px/s); dropping captures.",
-                        pixelBudget());
-            }
             return;
         }
         CameraPoseResolver.ResolvedPose resolved = best.resolvedPose();
         if (resolved == null) {
             return;
         }
-        this.override = new CameraOverride(
-                new Vec3(resolved.pose().x(), resolved.pose().y(), resolved.pose().z()),
-                resolved.pose().yaw(), resolved.pose().pitch(), resolved.pose().roll());
         this.pending = new PendingCapture(best, bestSession, resolution.width(),
                 resolution.height(), now);
-        this.savedRenderHand = false;
-        if (minecraft.gameRenderer instanceof com.ccvirtualcoms.mixin.client.GameRendererAccess access) {
-            this.savedRenderHand = access.ccvc$isRenderHand();
-            access.ccvc$setRenderHand(false);
-        }
-        this.captureFov = config.fov();
-        if (this.captureFov != this.loggedCaptureFov) {
-            this.loggedCaptureFov = this.captureFov;
-            CCVirtualComs.LOGGER.info("[camera] capture frame forced FOV = {} (player FOV untouched)",
-                    this.captureFov);
-        }
-        this.isolatePlayerCameraFeedback(minecraft);
     }
 
     /**
-     * Runs after the player's world is rendered and before the hand/HUD. Copies the whole camera
-     * frame out, puts the previous player frame back and restores the player camera for the
-     * hand/HUD passes. The player therefore never sees the camera frame.
+     * Runs after the player's world render: renders the camera frame into a private target whose
+     * framebuffer is temporarily installed as {@code Minecraft.mainRenderTarget}. Everything that
+     * binds the main target (entities, weather, transparency chains) lands in the private target,
+     * the player's frame stays untouched (no frame hold, no judder) and the camera frame is a
+     * complete, normal render rather than a nested re-render of the player frame.
      */
     public void afterWorldRender() {
         PendingCapture capture = this.pending;
@@ -301,43 +280,73 @@ public final class CameraCapturePipeline {
             return;
         }
         Minecraft minecraft = Minecraft.getInstance();
+        if (!(minecraft instanceof com.ccvirtualcoms.mixin.client.MinecraftAccess access)) {
+            this.pending = null;
+            return;
+        }
+        com.mojang.blaze3d.pipeline.RenderTarget previousTarget = access.ccvc$getMainRenderTarget();
         boolean issued = false;
         try {
-            ReadbackTarget target = capture.session.readbackTarget(capture.width, capture.height);
-            if (target.blitFrom(minecraft.getMainRenderTarget())) {
-                PboFrameReader reader = capture.session.reader(capture.width, capture.height);
-                capture.session.path = CapturePath.MAIN_TARGET;
-                capture.session.detail = "whole-frame camera capture; previous player frame held";
-                issued = reader.requestFramebufferRead(target.frameBufferId());
-            } else {
-                capture.session.detail = "skipped: could not copy the main frame";
+            this.ensureCaptureTarget(capture.width, capture.height);
+            com.mojang.blaze3d.pipeline.RenderTarget target = this.captureTarget;
+            if (target == null) {
+                return;
             }
-        } catch (RuntimeException failure) {
-            capture.session.failedFrames++;
-            this.failures++;
-            capture.session.detail = "capture failed: " + failure;
-            CCVirtualComs.LOGGER.warn("[camera] capture failed: {}", failure.toString());
-        } finally {
-            this.override = null;
-            this.pending = null;
-            this.captureFov = 0;
-            this.restorePlayerCameraFeedback(minecraft);
-            // The camera view replaced this frame's player world. Render the player's world again so
-            // the presented frame is the current one (no duplicated/hold frames -> no judder); the
-            // hand is still disabled here and is drawn once by the outer frame afterwards.
-            boolean previousCapturing = this.capturing;
+            com.mojang.blaze3d.systems.RenderSystem.viewport(0, 0, capture.width, capture.height);
+            access.ccvc$setMainRenderTarget(target);
+            target.clear(Minecraft.ON_OSX);
+            target.bindWrite(true);
+            CameraPoseResolver.ResolvedPose resolved = capture.camera.resolvedPose();
+            if (resolved == null) {
+                capture.session.detail = "skipped: no camera pose";
+                return;
+            }
+            this.override = new CameraOverride(
+                    new Vec3(resolved.pose().x(), resolved.pose().y(), resolved.pose().z()),
+                    resolved.pose().yaw(), resolved.pose().pitch(), resolved.pose().roll());
+            this.captureFov = capture.camera.config().fov();
+            this.isolatePlayerCameraFeedback(minecraft);
+            boolean previousHand = false;
+            if (minecraft.gameRenderer instanceof com.ccvirtualcoms.mixin.client.GameRendererAccess handAccess) {
+                previousHand = handAccess.ccvc$isRenderHand();
+                handAccess.ccvc$setRenderHand(false);
+            }
             this.capturing = true;
             try {
                 minecraft.gameRenderer.renderLevel(minecraft.getTimer());
             } catch (RuntimeException failure) {
-                CCVirtualComs.LOGGER.warn("[camera] player frame re-render failed: {}", failure.toString());
+                capture.session.failedFrames++;
+                this.failures++;
+                capture.session.detail = "capture failed: " + failure;
+                CCVirtualComs.LOGGER.warn("[camera] camera frame render failed: {}", failure.toString());
             } finally {
-                this.capturing = previousCapturing;
+                this.capturing = false;
+                if (minecraft.gameRenderer instanceof com.ccvirtualcoms.mixin.client.GameRendererAccess handAccess) {
+                    handAccess.ccvc$setRenderHand(previousHand);
+                }
             }
-            if (minecraft.gameRenderer instanceof com.ccvirtualcoms.mixin.client.GameRendererAccess access) {
-                access.ccvc$setRenderHand(this.savedRenderHand);
+            ReadbackTarget readback = capture.session.readbackTarget(capture.width, capture.height);
+            if (readback != null && readback.blitFrom(target)) {
+                PboFrameReader reader = capture.session.reader(capture.width, capture.height);
+                capture.session.path = CapturePath.MAIN_TARGET;
+                capture.session.detail = "private-target camera frame";
+                issued = reader.requestFramebufferRead(readback.frameBufferId());
+            } else {
+                capture.session.detail = "skipped: could not copy the camera frame";
             }
-            // The capture frame moved the real camera; put it back for hand/HUD rendering.
+        } finally {
+            this.override = null;
+            this.pending = null;
+            this.captureFov = 0;
+            this.capturing = false;
+            this.restorePlayerCameraFeedback(minecraft);
+            access.ccvc$setMainRenderTarget(previousTarget);
+            com.mojang.blaze3d.systems.RenderSystem.viewport(0, 0,
+                    minecraft.getWindow().getWidth(), minecraft.getWindow().getHeight());
+            if (previousTarget != null) {
+                previousTarget.bindWrite(false);
+            }
+            // put the real camera back for the hand/HUD passes of the player frame
             var entity = minecraft.getCameraEntity() == null ? minecraft.player : minecraft.getCameraEntity();
             if (entity != null && minecraft.level != null) {
                 minecraft.gameRenderer.getMainCamera().setup(minecraft.level, entity,
@@ -356,31 +365,27 @@ public final class CameraCapturePipeline {
         }
     }
 
-    /** Vertical FOV to force for the current capture frame, or {@code 0} when none is active. */
-    public int captureFov() {
-        return this.captureFov;
-    }
-
-    /** Camera override for the current capture frame, polled by {@code CameraCaptureMixin}. */
-    public @Nullable CameraOverride cameraOverride() {
-        return this.override;
-    }
-
-    /** {@code true} while the pipeline is rendering its own camera frame. */
-    public boolean isCapturing() {
-        return this.capturing;
+    private void ensureCaptureTarget(int width, int height) {
+        if (this.captureTarget != null && this.captureWidth == width && this.captureHeight == height) {
+            return;
+        }
+        if (this.captureTarget != null) {
+            this.captureTarget.destroyBuffers();
+        }
+        this.captureWidth = width;
+        this.captureHeight = height;
+        this.captureTarget = new com.mojang.blaze3d.pipeline.TextureTarget(width, height, true,
+                Minecraft.ON_OSX);
+        this.captureTarget.setClearColor(0.0F, 0.0F, 0.0F, 1.0F);
     }
 
     public void onFrameEnd() {
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft != null) {
-            this.frameBackup.save(minecraft);
-        }
         for (Session session : this.sessions.values()) {
             if (session.reader == null) {
                 continue;
             }
-            CameraFrame frame = session.reader.poll(++session.sequence, session.pendingCaptureNanos);
+            com.ccvirtualcoms.camera.api.CameraFrame frame =
+                    session.reader.poll(++session.sequence, session.pendingCaptureNanos);
             if (frame == null) {
                 continue;
             }
@@ -402,7 +407,6 @@ public final class CameraCapturePipeline {
         }
     }
 
-    /** Releases every GPU resource; call when leaving a level. */
     public void reset() {
         for (Session session : this.sessions.values()) {
             session.close();
@@ -410,11 +414,18 @@ public final class CameraCapturePipeline {
         this.sessions.clear();
         this.offscreen.close();
         this.frameBackup.reset();
+        if (this.captureTarget != null) {
+            this.captureTarget.destroyBuffers();
+            this.captureTarget = null;
+        }
+        this.pending = null;
+        this.override = null;
+        this.capturing = false;
+        this.captureFov = 0;
         this.budgetPixelsUsed = 0L;
         this.budgetWindowStartNanos = 0L;
     }
 
-    /** Releases one camera's GPU resources (called when the block disappears). */
     public void forget(long key) {
         Session session = this.sessions.remove(key);
         if (session != null) {
@@ -422,19 +433,16 @@ public final class CameraCapturePipeline {
         }
     }
 
-    /** Capture path currently used by a camera. */
     public CapturePath pathOf(long key) {
         Session session = this.sessions.get(key);
         return session == null ? CapturePath.PLACEHOLDER : session.path;
     }
 
-    /** Capture diagnostics of one camera. */
     public String detailOf(long key) {
         Session session = this.sessions.get(key);
         return session == null ? "capture pipeline idle" : session.detail;
     }
 
-    /** Capture diagnostics of one camera. */
     public String statsOf(long key) {
         Session session = this.sessions.get(key);
         if (session == null) {
@@ -446,11 +454,18 @@ public final class CameraCapturePipeline {
                 + " path=" + session.path;
     }
 
-    /**
-     * A capture frame must not inherit the player's view bob, hurt tilt or nausea (impact/spin)
-     * effects: those are player feedback, not camera properties. They are zeroed for the one frame
-     * and restored right after the camera frame has been rendered.
-     */
+    public boolean isCapturing() {
+        return this.capturing;
+    }
+
+    public @Nullable CameraOverride cameraOverride() {
+        return this.override;
+    }
+
+    public int captureFov() {
+        return this.captureFov;
+    }
+
     private void isolatePlayerCameraFeedback(Minecraft minecraft) {
         this.savedBobView = minecraft.options.bobView().get();
         minecraft.options.bobView().set(false);
