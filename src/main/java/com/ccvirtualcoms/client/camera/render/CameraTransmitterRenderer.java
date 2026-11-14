@@ -108,10 +108,12 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
                 // Frames use the per-axis converted angles (world-stable axes counter-rotate the
                 // sub-level, follow axes stay local). Only the head is driven by the quaternion to
                 // avoid gimbal-lock spinning.
-                yaw = display[0];
-                pitch = display[1];
-                roll = display[2];
-                if (Math.abs(pitch) > 78.0D) {
+                // Use the per-axis values directly: follow = local Euler, world = local decomposition
+                // of the world rotation (the full-pose decomposition would double the compensation).
+                yaw = useYaw;
+                pitch = usePitch;
+                roll = useRoll;
+                if (Math.abs(pitch) > 89.0D) {
                     headTarget = new org.joml.Quaterniond(modelRotation);
                 }
             }
