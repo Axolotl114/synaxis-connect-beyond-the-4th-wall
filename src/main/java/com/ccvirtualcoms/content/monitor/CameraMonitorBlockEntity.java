@@ -24,6 +24,13 @@ public class CameraMonitorBlockEntity extends BlockEntity {
     private int screenColumn;
     private int screenRow;
 
+    private static final java.util.Set<CameraMonitorBlockEntity> CLIENT_RECEIVERS =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    public static java.util.Set<CameraMonitorBlockEntity> clientReceivers() {
+        return CLIENT_RECEIVERS;
+    }
+
     public CameraMonitorBlockEntity(BlockPos pos, BlockState state) {
         super(CCVirtualComsRegistry.CAMERA_MONITOR_BE.get(), pos, state);
     }
@@ -169,6 +176,15 @@ public class CameraMonitorBlockEntity extends BlockEntity {
     public void onLoad() {
         super.onLoad();
         this.screenDirty = true;
+        if (this.level != null && this.level.isClientSide()) {
+            CLIENT_RECEIVERS.add(this);
+        }
+    }
+
+    @Override
+    public void setRemoved() {
+        CLIENT_RECEIVERS.remove(this);
+        super.setRemoved();
     }
 
     @Override
