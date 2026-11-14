@@ -3,21 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Synaxis 摄像头选择器</title>
+<title>摄像头选择器</title>
 <style>
   :root { color-scheme: dark; }
   body { margin:0; background:#101012; color:#ddd; font-family: ui-monospace, Consolas, monospace; display:flex; height:100vh; }
   #side { width:280px; min-width:240px; border-right:1px solid #2a2a2e; padding:12px; overflow:auto; box-sizing:border-box; }
   #main { flex:1; padding:12px; display:flex; flex-direction:column; gap:8px; min-width:0; }
   h1 { font-size:15px; margin:0 0 8px; font-weight:600; }
+  h2 { font-size:13px; margin:0; }
   .muted { color:#888; font-size:12px; }
   .ok { color:#6c6; } .off { color:#e66; }
-  #base { width:100%; box-sizing:border-box; background:#1a1a1e; color:#ddd; border:1px solid #333; padding:5px; font-family:inherit; margin-bottom:8px; }
+  #base { width:100%; box-sizing:border-box; background:#1a1a1e; color:#ddd; border:1px solid #333; padding:5px; margin-bottom:8px; }
+  #pause { width:100%; box-sizing:border-box; margin:8px 0; padding:6px; background:#1a1a1e; color:#ddd; border:1px solid #333; cursor:pointer; }
   #list { display:flex; flex-direction:column; gap:5px; }
-  #list button { text-align:left; background:#1a1a1e; color:#ddd; border:1px solid #333; padding:7px 8px; cursor:pointer; font-family:inherit; font-size:12px; border-radius:3px; }
+  #list button { text-align:left; background:#1a1a1e; color:#ddd; border:1px solid #333; padding:7px 8px; cursor:pointer; font-size:12px; border-radius:3px; }
   #list button:hover { border-color:#555; }
   #list button.sel { border-color:#6cf; color:#9df; }
-  #title { font-size:13px; margin:0; }
   #viewWrap { flex:1; display:flex; align-items:flex-start; justify-content:flex-start; min-height:0; }
   #view { max-width:100%; max-height:100%; background:#000; border:1px solid #2a2a2e; object-fit:contain; }
   #meta { color:#999; font-size:12px; white-space:pre-wrap; }
@@ -27,14 +28,13 @@
 </head>
 <body>
   <div id="side">
-    <h1>Synaxis 摄像头</h1>
+    <h1>摄像头选择器</h1>
     <input id="base" value="http://127.0.0.1:25586" title="MJPEG 服务器地址">
     <div id="driver" class="muted">连接中…</div>
     <div id="err"></div>
-    <button id="pause" type="button">鏆傚仠鐢婚潰</button>
+    <button id="pause" type="button">暂停画面</button>
     <div id="list"></div>
-    <p class="muted">游戏内需开启摄像头（Hold ON / 电路触发）。<br>
-      新窗口打开：<a id="openPage" href="#" target="_blank">/</a></p>
+    <p class="muted">游戏内需开启摄像头（Hold ON / 电路触发）。</p>
   </div>
   <div id="main">
     <h2 id="title">选择一个摄像头</h2>
@@ -47,9 +47,10 @@
   const baseInput = $('base');
   let current = null;
   let cameras = [];
-
+  let paused = false;
+  let pollTimer = null;
+  const POLL_MS = 8000;
   const base = () => baseInput.value.replace(/\/+$/, '');
-  const hexOk = (k) => /^[0-9a-fA-F]{1,16}$/.test(k);
 
   async function fetchJson(path) {
     const res = await fetch(base() + path, { cache: 'no-store' });
@@ -57,16 +58,36 @@
     return res.json();
   }
 
+  function streamUrl(cam) {
+    return base() + '/camera/' + encodeURIComponent(cam.key) + '/stream.mjpeg';
+  }
+
+  function stopStream() {
+    $('view').removeAttribute('src');
+  }
+
+  function applyStream() {
+    if (paused || document.hidden || !current) { stopStream(); return; }
+    const cam = cameras.find((c) => c.key === current);
+    if (!cam) { stopStream(); return; }
+    const url = streamUrl(cam);
+    if ($('view').getAttribute('src') !== url) $('view').src = url;
+  }
+
+  function updatePauseLabel() {
+    $('pause').textContent = paused ? '继续画面' : '暂停画面';
+  }
+
   function select(cam) {
     current = cam.key;
     $('title').textContent = cam.name + '  (' + cam.key + ')';
-    applyStream();
     $('meta').textContent =
       '位置: ' + cam.x + ', ' + cam.y + ', ' + cam.z + '\n' +
       '状态: ' + cam.status + (cam.published ? ' (有画面)' : ' (无画面)') + '\n' +
       '分辨率: ' + cam.width + 'x' + cam.height + ' @ ' + cam.fps + 'fps\n' +
       '设备: ' + (cam.device_name && cam.device_name.trim() ? cam.device_name : '-') + '\n' +
-      '直连: ' + url.replace(/\?t=\d+$/, '');
+      '直连: ' + streamUrl(cam);
+    applyStream();
     renderList();
   }
 
@@ -98,91 +119,43 @@
 
   async function refresh() {
     $('err').textContent = '';
-    $('openPage').href = base() + '/';
     try {
       const data = await fetchJson('/api/cameras');
       const driver = data.driver || {};
-      $('driver').innerHTML = '';
-      const span = document.createElement('span');
-      span.className = driver.available ? 'ok' : 'off';
-      span.textContent = driver.state || '?';
-      $('driver').append('驱动: ', span, document.createTextNode(' ' + (driver.detail || '')));
+      $('driver').textContent = '驱动: ' + (driver.state || '?') + ' ' + (driver.detail || '');
+      $('driver').className = driver.available ? 'muted ok' : 'muted off';
       cameras = data.cameras || [];
       if (!current || !cameras.some((c) => c.key === current)) {
-        const firstStreaming = cameras.find((c) => c.status === 'streaming') || cameras[0];
-        if (firstStreaming) select(firstStreaming);
-        else current = null;
+        const first = cameras.find((c) => c.status === 'streaming') || cameras[0];
+        if (first) select(first); else current = null;
       }
       renderList();
     } catch (e) {
-      $('err').textContent = '连接失败: ' + e.message + '（游戏是否已启动？）';
+      $('err').textContent = '连接失败: ' + e.message;
       cameras = [];
       renderList();
-    }
-  }
-
-  // ---- resource friendly behaviour -------------------------------------------------
-  // The page used to poll the API every 3 s and keep the MJPEG connection open even while
-  // hidden, which forced the game to keep capturing/encoding at full rate and caused periodic
-  // hitching.  Now: poll slowly, never poll or stream while the tab is hidden, and let the
-  // user pause the picture explicitly.
-  let paused = false;
-  let pollTimer = null;
-  const POLL_MS = 8000;
-
-  function stopStream() {
-    $('view').removeAttribute('src');
-  }
-
-  function applyStream() {
-    if (paused || document.hidden || !current) {
       stopStream();
-      return;
     }
-    const cam = cameras.find((c) => c.key === current);
-    if (!cam) {
-      stopStream();
-      return;
-    }
-    const url = base() + '/camera/' + encodeURIComponent(cam.key) + '/stream.mjpeg';
-    if ($('view').getAttribute('src') !== url) {
-      $('view').src = url;
-    }
-  }
-
-  function updatePauseLabel() {
-    $('pause').textContent = paused ? '缁х画鐢婚潰' : '鏆傚仠鐢婚潰';
   }
 
   $('pause').addEventListener('click', () => {
     paused = !paused;
     updatePauseLabel();
-    if (paused) stopStream();
-    else applyStream();
+    if (paused) stopStream(); else applyStream();
   });
 
   function schedulePoll() {
     if (pollTimer) clearTimeout(pollTimer);
     if (document.hidden) return;
-    pollTimer = setTimeout(async () => {
-      await refresh();
-      schedulePoll();
-    }, POLL_MS);
+    pollTimer = setTimeout(async () => { await refresh(); schedulePoll(); }, POLL_MS);
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      if (pollTimer) clearTimeout(pollTimer);
-      stopStream();
-    } else {
-      refresh();
-      applyStream();
-      schedulePoll();
-    }
+    if (document.hidden) { if (pollTimer) clearTimeout(pollTimer); stopStream(); }
+    else { refresh(); applyStream(); schedulePoll(); }
   });
 
   baseInput.addEventListener('change', () => { current = null; refresh(); });
-
   updatePauseLabel();
   refresh().then(applyStream);
   schedulePoll();

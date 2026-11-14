@@ -30,7 +30,7 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
 
     private static final Map<Long, DynamicTexture> TEXTURES = new HashMap<>();
     private static final Map<Long, Long> FRAMES = new HashMap<>();
-    private static final int TEX_SIZE = 1024;
+    private static final int TEX_SIZE = 512;
     private static final Map<Long, Integer> QUALITY = new HashMap<>();
     private static final Map<Long, Long> LAST_UPLOAD = new HashMap<>();
 
@@ -58,7 +58,7 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         // Estimated on-screen height in pixels (1080p-ish viewport): screenHeight / distance.
         double pixelHeight = projector.projectorHeight() / Math.max(0.05D, distance) * 720.0D;
         boolean veryNear = distance <= 5.0D;
-        int desired = veryNear ? 1024
+        int desired = veryNear ? 512
                 : pixelHeight > 260.0D ? 512 : pixelHeight > 130.0D ? 256
                 : pixelHeight > 65.0D ? 128 : 64;
         if (pixelHeight < 3.0D) {
