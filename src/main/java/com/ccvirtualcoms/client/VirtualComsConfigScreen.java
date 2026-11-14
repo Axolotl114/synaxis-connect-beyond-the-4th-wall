@@ -187,7 +187,7 @@ public class VirtualComsConfigScreen extends Screen {
         this.comIdBox.setTextColor(0xFF202028);
         this.addRenderableWidget(this.comIdBox);
 
-        this.addRenderableWidget(Button.builder(Component.translatable("cc_virtual_coms.screen.apply"),
+        this.addRenderableWidget(SynaxisBoardButton.flat(Component.translatable("cc_virtual_coms.screen.apply"),
                         button -> this.sendConfiguration())
                 .bounds(x + 226, y, 60, 18)
                 .build());
@@ -211,40 +211,40 @@ public class VirtualComsConfigScreen extends Screen {
             SerialPort port = this.working.get(index);
             int rowY = rowsTop + slot * ROW_HEIGHT;
 
-            this.addRenderableWidget(Button.builder(
+            this.addRenderableWidget(SynaxisBoardButton.flat(
                             Component.literal(port.type().serializedName()),
                             button -> this.cycleType(index))
                     .bounds(x + 108, rowY, 58, 17)
                     .build());
 
-            this.addRenderableWidget(Button.builder(
+            this.addRenderableWidget(SynaxisBoardButton.flat(
                             Component.literal(port.direction().serializedName()),
                             button -> this.cycleDirection(index))
                     .bounds(x + 170, rowY, 52, 17)
                     .tooltip(DIRECTION_TOOLTIP)
                     .build());
 
-            this.addRenderableWidget(Button.builder(
+            this.addRenderableWidget(SynaxisBoardButton.flat(
                             Component.literal(port.saveLastValue() ? "keep" : "last"),
                             button -> this.toggleSaveLastValue(index))
                     .bounds(x + 226, rowY, 46, 17)
                     .build());
 
-            this.addRenderableWidget(Button.builder(Component.literal("X"), button -> this.removePort(index))
+            this.addRenderableWidget(SynaxisBoardButton.flat(Component.literal("X"), button -> this.removePort(index))
                     .bounds(x + 276, rowY, 20, 17)
                     .build());
         }
 
         // ---- pagination --------------------------------------------------
         if (this.working.size() > ROWS_PER_PAGE) {
-            this.addRenderableWidget(Button.builder(Component.translatable("cc_virtual_coms.screen.prev"),
+            this.addRenderableWidget(SynaxisBoardButton.flat(Component.translatable("cc_virtual_coms.screen.prev"),
                             button -> {
                                 this.page = Math.max(0, this.page - 1);
                                 this.rebuildWidgets();
                             })
                     .bounds(x, this.top + 178, 52, 17)
                     .build());
-            this.addRenderableWidget(Button.builder(Component.translatable("cc_virtual_coms.screen.next"),
+            this.addRenderableWidget(SynaxisBoardButton.flat(Component.translatable("cc_virtual_coms.screen.next"),
                             button -> {
                                 this.page++;
                                 this.rebuildWidgets();
@@ -264,7 +264,7 @@ public class VirtualComsConfigScreen extends Screen {
         this.addNameBox.setTextColor(0xFF202028);
         this.addRenderableWidget(this.addNameBox);
 
-        this.addTypeButton = this.addRenderableWidget(Button.builder(
+        this.addTypeButton = this.addRenderableWidget(SynaxisBoardButton.flat(
                         Component.literal(this.newPortType.serializedName()),
                         button -> {
                             this.newPortType = next(PortType.values(), this.newPortType);
@@ -273,7 +273,7 @@ public class VirtualComsConfigScreen extends Screen {
                 .bounds(x + 106, addY, 58, 18)
                 .build());
 
-        this.addDirectionButton = this.addRenderableWidget(Button.builder(
+        this.addDirectionButton = this.addRenderableWidget(SynaxisBoardButton.flat(
                         Component.literal(this.newPortDirection.serializedName()),
                         button -> {
                             this.newPortDirection = next(PortDirection.values(), this.newPortDirection);
@@ -283,13 +283,13 @@ public class VirtualComsConfigScreen extends Screen {
                 .tooltip(DIRECTION_TOOLTIP)
                 .build());
 
-        this.addRenderableWidget(Button.builder(Component.translatable("cc_virtual_coms.screen.add"),
+        this.addRenderableWidget(SynaxisBoardButton.flat(Component.translatable("cc_virtual_coms.screen.add"),
                         button -> this.addPort())
                 .bounds(x + 224, addY, 72, 18)
                 .build());
 
         // ---- done ---------------------------------------------------------
-        this.addRenderableWidget(Button.builder(Component.translatable("cc_virtual_coms.screen.done"),
+        this.addRenderableWidget(SynaxisBoardButton.flat(Component.translatable("cc_virtual_coms.screen.done"),
                         button -> this.onClose())
                 .bounds(this.left + PANEL_WIDTH - 70, this.top + PANEL_HEIGHT - 22, 60, 18)
                 .build());
