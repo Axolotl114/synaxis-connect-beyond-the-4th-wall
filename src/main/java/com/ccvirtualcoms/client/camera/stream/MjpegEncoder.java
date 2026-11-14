@@ -248,9 +248,12 @@ public final class MjpegEncoder {
                     int hot = thermalLuma(luma);
                     int white = Math.max(0, Math.min(255, (int) Math.round(hot * 1.35D + 22.0D)));
                     if (frame.maskAt(sourceX, sourceY) > 0.5F) {
-                        // Close geometry (creatures / sub-level surfaces) is lifted; distant
-                        // background keeps the base night-vision brightness.
+                        // Entities: strong lift.
                         white = Math.max(0, Math.min(255, (int) Math.round(white * 2.0D + 45.0D)));
+                    } else if (hot >= 190) {
+                        // Bright light sources / strongly lit surfaces (sub-levels included) get a
+                        // mild gain; ordinary terrain keeps the base brightness.
+                        white = Math.max(0, Math.min(255, white + 35));
                     }
                     int r = Math.min(255, white + 6);
                     int g = white;

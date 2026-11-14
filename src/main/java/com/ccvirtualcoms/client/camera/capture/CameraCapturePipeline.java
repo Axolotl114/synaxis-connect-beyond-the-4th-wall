@@ -308,14 +308,17 @@ public final class CameraCapturePipeline {
         if (minecraft.level == null || minecraft.gameRenderer.getMainCamera() == null) {
             return null;
         }
-        com.mojang.blaze3d.pipeline.TextureTarget maskTarget = this.ensureMaskTarget(width, height);
+        com.mojang.blaze3d.pipeline.TextureTarget maskTarget = this.ensureMaskTarget(
+                minecraft.getMainRenderTarget().width, minecraft.getMainRenderTarget().height);
+        int maskWidth = maskTarget == null ? width : maskTarget.width;
+        int maskHeight = maskTarget == null ? height : maskTarget.height;
         if (maskTarget == null) {
             return null;
         }
         try {
             maskTarget.clear(Minecraft.ON_OSX);
             maskTarget.bindWrite(true);
-            com.mojang.blaze3d.systems.RenderSystem.viewport(0, 0, width, height);
+            com.mojang.blaze3d.systems.RenderSystem.viewport(0, 0, maskWidth, maskHeight);
             net.minecraft.client.Camera camera = minecraft.gameRenderer.getMainCamera();
             com.mojang.blaze3d.vertex.PoseStack pose = new com.mojang.blaze3d.vertex.PoseStack();
             pose.mulPose(camera.rotation());
@@ -338,20 +341,34 @@ public final class CameraCapturePipeline {
                 pose.popPose();
             }
             buffers.endBatch();
-            int byteSize = width * height * 4;
+            int byteSize = maskWidth * maskHeight * 4;
             java.nio.ByteBuffer pixels = org.lwjgl.BufferUtils.createByteBuffer(byteSize);
             com.mojang.blaze3d.platform.GlStateManager._glBindFramebuffer(
                     org.lwjgl.opengl.GL30.GL_READ_FRAMEBUFFER, maskTarget.frameBufferId);
-            org.lwjgl.opengl.GL11.glReadPixels(0, 0, width, height,
+            org.lwjgl.opengl.GL11.glReadPixels(0, 0, maskWidth, maskHeight,
                     org.lwjgl.opengl.GL11.GL_RGBA, org.lwjgl.opengl.GL11.GL_UNSIGNED_BYTE, pixels);
             com.mojang.blaze3d.platform.GlStateManager._glBindFramebuffer(
                     org.lwjgl.opengl.GL30.GL_READ_FRAMEBUFFER, 0);
             minecraft.getMainRenderTarget().bindWrite(false);
+            double destinationAspect = (double) width / (double) height;
+            double sourceAspect = (double) maskWidth / (double) maskHeight;
+            int cropX = 0;
+            int cropY = 0;
+            int cropWidth = maskWidth;
+            int cropHeight = maskHeight;
+            if (sourceAspect > destinationAspect) {
+                cropWidth = (int) Math.round(maskHeight * destinationAspect);
+                cropX = (maskWidth - cropWidth) / 2;
+            } else if (sourceAspect < destinationAspect) {
+                cropHeight = (int) Math.round(maskWidth / destinationAspect);
+                cropY = (maskHeight - cropHeight) / 2;
+            }
             float[] mask = new float[width * height];
             for (int y = 0; y < height; y++) {
-                int sourceRow = (height - 1 - y) * width * 4;
+                int sourceY = cropY + (int) ((long) (height - 1 - y) * cropHeight / height);
                 for (int x = 0; x < width; x++) {
-                    int index = sourceRow + x * 4;
+                    int sourceX = cropX + (int) ((long) x * cropWidth / width);
+                    int index = (sourceY * maskWidth + sourceX) * 4;
                     int r = pixels.get(index) & 0xFF;
                     int g = pixels.get(index + 1) & 0xFF;
                     int b = pixels.get(index + 2) & 0xFF;
@@ -451,17 +468,7 @@ public final class CameraCapturePipeline {
                 if (thermalLook) {
                     // Strict mask pass: render only entities into the mask target, and use the
                     // depth proximity mask for sub-level geometry when the camera is inside one.
-                    float[] entities = this.renderEntityMask(minecraft, capture.width, capture.height);
-                    boolean inSubLevel = com.ccvirtualcoms.content.camera.CameraLocator
-                            .containingSubLevel(minecraft.level, capture.camera.pos()) != null;
-                    float[] subLevel = inSubLevel
-                            ? this.readProximityMask(minecraft, capture.width, capture.height) : null;
-                    mask = new float[capture.width * capture.height];
-                    for (int index = 0; index < mask.length; index++) {
-                        float entity = entities == null ? 0.0F : entities[index];
-                        float sub = subLevel == null ? 0.0F : subLevel[index];
-                        mask[index] = Math.max(entity, sub);
-                    }
+                    mask = this.renderEntityMask(minecraft, capture.width, capture.height);
                 }
                 issued = reader.requestFramebufferRead(target.frameBufferId(), mask);
             } else {
