@@ -110,6 +110,8 @@ public final class CameraCapturePipeline {
     private long lastReadbackNanos;
     private long lastCaptureNanos;
     private org.joml.Matrix4f captureProjection;
+    private org.joml.Quaternionf captureCameraRotation;
+    private net.minecraft.world.phys.Vec3 captureCameraPosition;
     private boolean mainTargetFlickerLogged;
     private boolean mainFrameLogged;
 
@@ -311,57 +313,76 @@ public final class CameraCapturePipeline {
      * surfaces), 0 for the distant background. The mask is attached to the captured frame so the
      * monochrome + night-vision palette can lift only those pixels.
      */
-    /**
-     * Builds the night-vision mask from the entity rectangles recorded during the real camera
-     * render (so the angle always matches the captured frame) and refines each rectangle with the
-     * depth buffer so the result follows the entity silhouette instead of a plain box.
-     */
+    /** Renders entities only (white on black) with the frame camera, giving real silhouettes. */
     private float[] renderEntityMask(Minecraft minecraft, int width, int height) {
-        java.util.List<float[]> rects = EntityMaskCollector.rects();
-        EntityMaskCollector.end();
-        if (minecraft.level == null || rects.isEmpty()) {
+        if (minecraft.level == null || this.captureCameraRotation == null) {
             return null;
         }
-        com.mojang.blaze3d.pipeline.RenderTarget main = minecraft.getMainRenderTarget();
-        float[] distances = this.readProximityMask(minecraft, main.width, main.height);
-        if (distances == null) {
+        com.mojang.blaze3d.pipeline.TextureTarget target = this.ensureMaskTarget(width, height);
+        if (target == null) {
             return null;
         }
-        double destinationAspect = (double) width / (double) height;
-        double sourceAspect = (double) main.width / (double) main.height;
-        int cropX = 0;
-        int cropY = 0;
-        int cropWidth = main.width;
-        int cropHeight = main.height;
-        if (sourceAspect > destinationAspect) {
-            cropWidth = (int) Math.round(main.height * destinationAspect);
-            cropX = (main.width - cropWidth) / 2;
-        } else if (sourceAspect < destinationAspect) {
-            cropHeight = (int) Math.round(main.width / destinationAspect);
-            cropY = (main.height - cropHeight) / 2;
-        }
-        float[] mask = new float[width * height];
-        for (int y = 0; y < height; y++) {
-            float windowY = cropY + (y + 0.5F) * cropHeight / height;
-            int row = (int) windowY * main.width;
-            for (int x = 0; x < width; x++) {
-                float windowX = cropX + (x + 0.5F) * cropWidth / width;
-                if (windowX < 0.0F || windowY < 0.0F
-                        || windowX >= main.width || windowY >= main.height) {
+        org.joml.Matrix4f previousProjection = new org.joml.Matrix4f(
+                com.mojang.blaze3d.systems.RenderSystem.getProjectionMatrix());
+        try {
+            target.clear(Minecraft.ON_OSX);
+            target.bindWrite(true);
+            com.mojang.blaze3d.systems.RenderSystem.viewport(0, 0, width, height);
+            if (this.captureProjection != null) {
+                com.mojang.blaze3d.systems.RenderSystem.setProjectionMatrix(
+                        this.captureProjection,
+                        com.mojang.blaze3d.systems.RenderSystem.getVertexSorting());
+            }
+            com.mojang.blaze3d.vertex.PoseStack pose = new com.mojang.blaze3d.vertex.PoseStack();
+            pose.mulPose(this.captureCameraRotation);
+            net.minecraft.client.renderer.MultiBufferSource.BufferSource buffers =
+                    minecraft.renderBuffers().bufferSource();
+            float partialTick = CameraCaptureRuntime.get().partialTick();
+            for (net.minecraft.world.entity.Entity entity : minecraft.level.entitiesForRendering()) {
+                if (entity == minecraft.getCameraEntity() || !entity.shouldRender(
+                        this.captureCameraPosition.x, this.captureCameraPosition.y,
+                        this.captureCameraPosition.z)) {
                     continue;
                 }
-                float distance = distances[row + (int) windowX];
-                for (float[] rect : rects) {
-                    if (windowX >= rect[0] && windowX <= rect[2]
-                            && windowY >= rect[1] && windowY <= rect[3]
-                            && distance >= rect[4] - 0.75F && distance <= rect[5] + 0.75F) {
-                        mask[y * width + x] = 1.0F;
-                        break;
-                    }
+                pose.pushPose();
+                pose.translate(entity.getX() - this.captureCameraPosition.x,
+                        entity.getY() - this.captureCameraPosition.y,
+                        entity.getZ() - this.captureCameraPosition.z);
+                minecraft.getEntityRenderDispatcher().render(entity, 0.0D, 0.0D, 0.0D,
+                        entity.getYRot(), partialTick, pose, buffers, 15728880);
+                pose.popPose();
+            }
+            buffers.endBatch();
+            int byteSize = width * height * 4;
+            java.nio.ByteBuffer pixels = org.lwjgl.BufferUtils.createByteBuffer(byteSize);
+            com.mojang.blaze3d.platform.GlStateManager._glBindFramebuffer(
+                    org.lwjgl.opengl.GL30.GL_READ_FRAMEBUFFER, target.frameBufferId);
+            org.lwjgl.opengl.GL11.glReadPixels(0, 0, width, height,
+                    org.lwjgl.opengl.GL11.GL_RGBA, org.lwjgl.opengl.GL11.GL_UNSIGNED_BYTE, pixels);
+            com.mojang.blaze3d.platform.GlStateManager._glBindFramebuffer(
+                    org.lwjgl.opengl.GL30.GL_READ_FRAMEBUFFER, 0);
+            float[] mask = new float[width * height];
+            for (int y = 0; y < height; y++) {
+                int sourceRow = (height - 1 - y) * width * 4;
+                for (int x = 0; x < width; x++) {
+                    int index = sourceRow + x * 4;
+                    int r = pixels.get(index) & 0xFF;
+                    int g = pixels.get(index + 1) & 0xFF;
+                    int b = pixels.get(index + 2) & 0xFF;
+                    mask[y * width + x] = (r + g + b) > 24 ? 1.0F : 0.0F;
                 }
             }
+            return mask;
+        } catch (RuntimeException failure) {
+            CCVirtualComs.LOGGER.warn("[camera] entity mask pass failed: {}", failure.toString());
+            return null;
+        } finally {
+            com.mojang.blaze3d.systems.RenderSystem.setProjectionMatrix(
+                    previousProjection, com.mojang.blaze3d.systems.RenderSystem.getVertexSorting());
+            minecraft.getMainRenderTarget().bindWrite(false);
+            com.mojang.blaze3d.systems.RenderSystem.viewport(0, 0,
+                    minecraft.getWindow().getWidth(), minecraft.getWindow().getHeight());
         }
-        return mask;
     }
 
     private com.mojang.blaze3d.pipeline.TextureTarget ensureMaskTarget(int width, int height) {
@@ -435,6 +456,9 @@ public final class CameraCapturePipeline {
         // The projection that produced this camera frame (used by the entity mask pass).
         this.captureProjection = new org.joml.Matrix4f(
                 com.mojang.blaze3d.systems.RenderSystem.getProjectionMatrix());
+        net.minecraft.client.Camera frameCamera = minecraft.gameRenderer.getMainCamera();
+        this.captureCameraRotation = new org.joml.Quaternionf(frameCamera.rotation());
+        this.captureCameraPosition = frameCamera.getPosition();
         boolean issued = false;
         try {
             ReadbackTarget target = capture.session.readbackTarget(capture.width, capture.height);
