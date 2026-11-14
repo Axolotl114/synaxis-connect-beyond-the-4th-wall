@@ -109,6 +109,7 @@ public final class CameraCapturePipeline {
     private long failures;
     private long lastReadbackNanos;
     private long lastCaptureNanos;
+    private org.joml.Matrix4f captureProjection;
     private boolean mainTargetFlickerLogged;
     private boolean mainFrameLogged;
 
@@ -288,6 +289,8 @@ public final class CameraCapturePipeline {
             this.savedRenderHand = access.ccvc$isRenderHand();
             access.ccvc$setRenderHand(false);
         }
+        this.captureProjection = new org.joml.Matrix4f(
+                com.mojang.blaze3d.systems.RenderSystem.getProjectionMatrix());
         this.captureFov = config.fov();
         if (this.captureFov != this.loggedCaptureFov) {
             this.loggedCaptureFov = this.captureFov;
@@ -316,9 +319,15 @@ public final class CameraCapturePipeline {
             return null;
         }
         try {
+            org.joml.Matrix4f previousProjection = new org.joml.Matrix4f(
+                    com.mojang.blaze3d.systems.RenderSystem.getProjectionMatrix());
             maskTarget.clear(Minecraft.ON_OSX);
             maskTarget.bindWrite(true);
             com.mojang.blaze3d.systems.RenderSystem.viewport(0, 0, maskWidth, maskHeight);
+            if (this.captureProjection != null) {
+                com.mojang.blaze3d.systems.RenderSystem.setProjectionMatrix(
+                        this.captureProjection, com.mojang.blaze3d.systems.RenderSystem.getVertexSorting());
+            }
             net.minecraft.client.Camera camera = minecraft.gameRenderer.getMainCamera();
             com.mojang.blaze3d.vertex.PoseStack pose = new com.mojang.blaze3d.vertex.PoseStack();
             pose.mulPose(camera.rotation());
@@ -349,6 +358,8 @@ public final class CameraCapturePipeline {
                     org.lwjgl.opengl.GL11.GL_RGBA, org.lwjgl.opengl.GL11.GL_UNSIGNED_BYTE, pixels);
             com.mojang.blaze3d.platform.GlStateManager._glBindFramebuffer(
                     org.lwjgl.opengl.GL30.GL_READ_FRAMEBUFFER, 0);
+            com.mojang.blaze3d.systems.RenderSystem.setProjectionMatrix(
+                    previousProjection, com.mojang.blaze3d.systems.RenderSystem.getVertexSorting());
             minecraft.getMainRenderTarget().bindWrite(false);
             double destinationAspect = (double) width / (double) height;
             double sourceAspect = (double) maskWidth / (double) maskHeight;
@@ -455,6 +466,9 @@ public final class CameraCapturePipeline {
             return;
         }
         Minecraft minecraft = Minecraft.getInstance();
+        // The projection that produced this camera frame (used by the entity mask pass).
+        this.captureProjection = new org.joml.Matrix4f(
+                com.mojang.blaze3d.systems.RenderSystem.getProjectionMatrix());
         boolean issued = false;
         try {
             ReadbackTarget target = capture.session.readbackTarget(capture.width, capture.height);
