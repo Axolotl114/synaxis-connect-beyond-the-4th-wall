@@ -84,18 +84,21 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
             if (subLevel instanceof dev.ryanhcode.sable.sublevel.ClientSubLevel clientSubLevel) {
                 org.joml.Quaterniond subRotation = new org.joml.Quaterniond(
                         clientSubLevel.renderPose(partialTick).orientation());
+                // Model animation runs in sub-level local space:
+                //   follow axes -> raw local Euler component;
+                //   world-stable axes -> world angle converted into local space by inverse(sub-level).
                 org.joml.Quaterniond local = com.ccvirtualcoms.client.camera.capture.CameraTransformMath
                         .cameraRotation((float) yaw, (float) pitch, (float) roll);
-                float[] absolute = com.ccvirtualcoms.client.camera.capture.CameraTransformMath
-                        .eulerFromRotation(local, new float[3]);
-                float[] follow = com.ccvirtualcoms.client.camera.capture.CameraTransformMath
-                        .eulerFromRotation(new org.joml.Quaterniond(subRotation).mul(local), new float[3]);
+                org.joml.Quaterniond worldToLocal = new org.joml.Quaterniond(subRotation)
+                        .invert().mul(local);
+                float[] worldLocal = com.ccvirtualcoms.client.camera.capture.CameraTransformMath
+                        .eulerFromRotation(worldToLocal, new float[3]);
                 float useYaw = camera.config().yawMode() == com.ccvirtualcoms.camera.CameraAxisMode.WORLD_STABLE
-                        ? absolute[0] : follow[0];
+                        ? worldLocal[0] : (float) yaw;
                 float usePitch = camera.config().pitchMode() == com.ccvirtualcoms.camera.CameraAxisMode.WORLD_STABLE
-                        ? absolute[1] : follow[1];
+                        ? worldLocal[1] : (float) pitch;
                 float useRoll = camera.config().rollMode() == com.ccvirtualcoms.camera.CameraAxisMode.WORLD_STABLE
-                        ? absolute[2] : follow[2];
+                        ? worldLocal[2] : (float) roll;
                 org.joml.Quaterniond worldRotation = com.ccvirtualcoms.client.camera.capture.CameraTransformMath
                         .cameraRotation(useYaw, usePitch, useRoll);
                 org.joml.Quaterniond modelRotation = new org.joml.Quaterniond(subRotation)
@@ -108,7 +111,9 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
                 yaw = display[0];
                 pitch = display[1];
                 roll = display[2];
-                headTarget = new org.joml.Quaterniond(modelRotation);
+                if (Math.abs(pitch) > 78.0D) {
+                    headTarget = new org.joml.Quaterniond(modelRotation);
+                }
             }
         }
 
