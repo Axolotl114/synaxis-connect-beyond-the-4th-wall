@@ -43,12 +43,6 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         if (!projector.enabled() || projector.cameraPos() == null) {
             return;
         }
-        // Never draw screens into a camera capture frame: the camera would see its own picture
-        // and create recursive picture-in-picture feedback.
-        if (com.ccvirtualcoms.client.camera.capture.CameraCapturePipeline.get()
-                .cameraOverride() != null) {
-            return;
-        }
         org.joml.Vector3f cameraPos = Minecraft.getInstance().gameRenderer.getMainCamera()
                 .getPosition().toVector3f();
         double dx = projector.getBlockPos().getX() + 0.5D + projector.offsetX() - cameraPos.x;

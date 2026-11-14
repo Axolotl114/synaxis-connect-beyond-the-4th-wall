@@ -44,7 +44,9 @@ public final class PboFrameReader implements AutoCloseable {
     private final long[] fences = new long[BUFFER_COUNT];
     private final boolean[] inFlight = new boolean[BUFFER_COUNT];
     private final byte[][] framePool = new byte[3][];
+    private final byte[][] rawPool = new byte[3][];
     private int framePoolCursor;
+    private int rawPoolCursor;
 
     private int cursor;
     private boolean closed;
@@ -191,19 +193,21 @@ public final class PboFrameReader implements AutoCloseable {
             this.framePool[this.framePoolCursor] = rgba;
         }
         this.framePoolCursor = (this.framePoolCursor + 1) % this.framePool.length;
+        byte[] raw = this.rawPool[this.rawPoolCursor];
+        if (raw == null || raw.length != this.byteSize) {
+            raw = new byte[this.byteSize];
+            this.rawPool[this.rawPoolCursor] = raw;
+        }
+        this.rawPoolCursor = (this.rawPoolCursor + 1) % this.rawPool.length;
+        mapped.position(0);
+        mapped.get(raw, 0, this.byteSize);
         int rowBytes = this.width * 4;
         for (int y = 0; y < this.height; y++) {
             int sourceRow = (this.height - 1 - y) * rowBytes;
-            int destRow = y * rowBytes;
-            for (int x = 0; x < rowBytes; x += 4) {
-                int source = sourceRow + x;
-                int dest = destRow + x;
-                rgba[dest] = mapped.get(source);
-                rgba[dest + 1] = mapped.get(source + 1);
-                rgba[dest + 2] = mapped.get(source + 2);
-                // The main target's alpha channel is often 0; frames are opaque.
-                rgba[dest + 3] = (byte) 0xFF;
-            }
+            System.arraycopy(raw, sourceRow, rgba, y * rowBytes, rowBytes);
+        }
+        for (int i = 3; i < rgba.length; i += 4) {
+            rgba[i] = (byte) 0xFF;
         }
         return new CameraFrame(this.width, this.height, sequence, captureNanos, rgba);
     }
