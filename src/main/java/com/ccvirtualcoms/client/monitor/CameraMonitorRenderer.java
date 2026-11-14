@@ -78,7 +78,7 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         VertexConsumer consumer = buffers.getBuffer(RenderType.text(texture));
         float inset = 0.0625F;
         float x0 = (column == 0 ? inset : 0.0F);
-        float x1 = (column == width - 1 ? 0.0F : 1.0F);
+        float x1 = (column == width - 1 ? 1.0F - inset : 1.0F);
         float y0 = (row == height - 1 ? inset : 0.0F);
         float y1 = (row == 0 ? 1.0F - inset : 1.0F);
         float u0 = (float) column / width;
