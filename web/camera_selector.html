@@ -60,8 +60,7 @@
   function select(cam) {
     current = cam.key;
     $('title').textContent = cam.name + '  (' + cam.key + ')';
-    const url = base() + '/camera/' + encodeURIComponent(cam.key) + '/stream.mjpeg?t=' + Date.now();
-    $('view').src = url;
+    applyStream();
     $('meta').textContent =
       '位置: ' + cam.x + ', ' + cam.y + ', ' + cam.z + '\n' +
       '状态: ' + cam.status + (cam.published ? ' (有画面)' : ' (无画面)') + '\n' +
