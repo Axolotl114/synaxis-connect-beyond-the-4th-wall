@@ -1,9 +1,9 @@
 package com.ccvirtualcoms.content;
 
 import com.ccvirtualcoms.CCVirtualComs;
-import com.ccvirtualcoms.content.camera.CameraTransmitterBlock;
 import com.ccvirtualcoms.content.monitor.CameraMonitorBlock;
 import com.ccvirtualcoms.content.monitor.CameraMonitorBlockEntity;
+import com.ccvirtualcoms.content.camera.CameraTransmitterBlock;
 import com.ccvirtualcoms.content.camera.CameraTransmitterBlockEntity;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.item.BlockItem;

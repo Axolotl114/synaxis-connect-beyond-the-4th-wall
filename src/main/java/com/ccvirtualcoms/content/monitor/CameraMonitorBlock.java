@@ -71,7 +71,43 @@ public class CameraMonitorBlock extends BaseEntityBlock {
     @Override
     protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos,
                                   CollisionContext context) {
-        return SHAPES[state.getValue(FACING).get2DDataValue()];
+        return net.minecraft.world.phys.shapes.Shapes.block();
+    }
+
+    @Override
+    protected void onPlace(BlockState state, net.minecraft.world.level.Level level, BlockPos pos,
+                           BlockState oldState, boolean movedByPiston) {
+        super.onPlace(state, level, pos, oldState, movedByPiston);
+        markScreenDirty(level, pos);
+    }
+
+    @Override
+    protected void onRemove(BlockState state, net.minecraft.world.level.Level level, BlockPos pos,
+                            BlockState newState, boolean movedByPiston) {
+        super.onRemove(state, level, pos, newState, movedByPiston);
+        markScreenDirty(level, pos);
+    }
+
+    @Override
+    protected void neighborChanged(BlockState state, net.minecraft.world.level.Level level,
+                                   BlockPos pos, Block neighborBlock, BlockPos neighborPos,
+                                   boolean movedByPiston) {
+        super.neighborChanged(state, level, pos, neighborBlock, neighborPos, movedByPiston);
+        markScreenDirty(level, pos);
+    }
+
+    private static void markScreenDirty(net.minecraft.world.level.Level level, BlockPos pos) {
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    BlockPos target = pos.offset(dx, dy, dz);
+                    if (level.getBlockEntity(target)
+                            instanceof CameraMonitorBlockEntity monitor) {
+                        monitor.markScreenDirty();
+                    }
+                }
+            }
+        }
     }
 
     @Override
