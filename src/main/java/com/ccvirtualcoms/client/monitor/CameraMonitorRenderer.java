@@ -51,7 +51,12 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         double apparent = projector.projectorWidth() * projector.projectorHeight()
                 / Math.max(1.0D, distance * distance);
         int texSize = apparent > 40.0D ? 512 : apparent > 10.0D ? 256 : apparent > 2.0D ? 128 : 64;
-        if (distance > 256.0D || apparent < 0.05D) {
+        // Disappear distance scales with the physical screen size: bigger screens stay visible
+        // much farther away. 48 blocks per block of screen diagonal, clamped to a sane range.
+        double diagonal = Math.sqrt(projector.projectorWidth() * projector.projectorWidth()
+                + projector.projectorHeight() * projector.projectorHeight());
+        double disappearDistance = Math.max(32.0D, Math.min(1024.0D, diagonal * 48.0D));
+        if (distance > disappearDistance || apparent < 0.05D) {
             return;
         }
         CapturedCamera camera = CameraCaptureRuntime.get().camera(projector.cameraPos().asLong());
@@ -59,9 +64,9 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         CameraConfig config = camera == null ? CameraConfig.DEFAULT : camera.config();
         float width = (float) projector.projectorWidth();
         float height = (float) projector.projectorHeight();
-        double fadeStart = 256.0D / 3.0D;
+        double fadeStart = disappearDistance / 3.0D;
         float fade = (float) Math.max(0.0D, Math.min(1.0D,
-                (256.0D - distance) / (256.0D - fadeStart)));
+                (disappearDistance - distance) / (disappearDistance - fadeStart)));
         int effectiveOpacity = Math.round(projector.opacity() * fade);
         ResourceLocation texture = upload(projector, frame, config, width / height,
                 effectiveOpacity, texSize);
