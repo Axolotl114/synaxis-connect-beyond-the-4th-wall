@@ -30,7 +30,7 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
 
     private static final Map<Long, DynamicTexture> TEXTURES = new HashMap<>();
     private static final Map<Long, Long> FRAMES = new HashMap<>();
-    private static final int TEX_SIZE = 512;
+    private static final int TEX_SIZE = 1024;
     private static final Map<Long, Integer> QUALITY = new HashMap<>();
     private static final Map<Long, Long> LAST_UPLOAD = new HashMap<>();
 
@@ -57,7 +57,9 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
         // Estimated on-screen height in pixels (1080p-ish viewport): screenHeight / distance.
         double pixelHeight = projector.projectorHeight() / Math.max(0.05D, distance) * 720.0D;
-        int desired = pixelHeight > 260.0D ? 512 : pixelHeight > 130.0D ? 256
+        boolean veryNear = distance <= 5.0D;
+        int desired = veryNear ? 1024
+                : pixelHeight > 260.0D ? 512 : pixelHeight > 130.0D ? 256
                 : pixelHeight > 65.0D ? 128 : 64;
         if (pixelHeight < 3.0D) {
             return;
@@ -139,7 +141,8 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         Long previous = FRAMES.get(key);
         long now = System.nanoTime();
         long last = LAST_UPLOAD.getOrDefault(key, 0L);
-        long interval = texSize >= 256 ? 33_000_000L : texSize >= 128 ? 66_000_000L
+        long interval = veryNear ? 0L
+                : texSize >= 256 ? 33_000_000L : texSize >= 128 ? 66_000_000L
                 : texSize >= 64 ? 132_000_000L : 200_000_000L;
         if ((previous == null || previous != signature) && now - last >= interval) {
             LAST_UPLOAD.put(key, now);
