@@ -295,6 +295,55 @@ public final class CameraCapturePipeline {
     }
 
     /**
+     * Reads the depth buffer of the camera frame while the main target still holds it and turns it
+     * into a 1/0 brightness mask: 1 for geometry close to the camera (creatures, sub-level
+     * surfaces), 0 for the distant background. The mask is attached to the captured frame so the
+     * monochrome + night-vision palette can lift only those pixels.
+     */
+    private float[] readProximityMask(Minecraft minecraft, int width, int height) {
+        com.mojang.blaze3d.pipeline.RenderTarget source = minecraft.getMainRenderTarget();
+        int sourceWidth = source.width;
+        int sourceHeight = source.height;
+        if (sourceWidth <= 0 || sourceHeight <= 0) {
+            return null;
+        }
+        double destinationAspect = (double) width / (double) height;
+        double sourceAspect = (double) sourceWidth / (double) sourceHeight;
+        int cropX = 0;
+        int cropY = 0;
+        int cropWidth = sourceWidth;
+        int cropHeight = sourceHeight;
+        if (sourceAspect > destinationAspect) {
+            cropWidth = (int) Math.round(sourceHeight * destinationAspect);
+            cropX = (sourceWidth - cropWidth) / 2;
+        } else if (sourceAspect < destinationAspect) {
+            cropHeight = (int) Math.round(sourceWidth / destinationAspect);
+            cropY = (sourceHeight - cropHeight) / 2;
+        }
+        java.nio.FloatBuffer depth = org.lwjgl.BufferUtils.createFloatBuffer(sourceWidth * sourceHeight);
+        com.mojang.blaze3d.platform.GlStateManager._glBindFramebuffer(
+                org.lwjgl.opengl.GL30.GL_READ_FRAMEBUFFER, source.frameBufferId);
+        org.lwjgl.opengl.GL11.glReadPixels(0, 0, sourceWidth, sourceHeight,
+                org.lwjgl.opengl.GL11.GL_DEPTH_COMPONENT, org.lwjgl.opengl.GL11.GL_FLOAT, depth);
+        com.mojang.blaze3d.platform.GlStateManager._glBindFramebuffer(
+                org.lwjgl.opengl.GL30.GL_READ_FRAMEBUFFER, 0);
+        float near = 0.05F;
+        float far = (float) minecraft.gameRenderer.getDepthFar();
+        float threshold = 48.0F;
+        float[] mask = new float[width * height];
+        for (int y = 0; y < height; y++) {
+            int sourceY = cropY + (int) ((long) (height - 1 - y) * cropHeight / height);
+            for (int x = 0; x < width; x++) {
+                int sourceX = cropX + (int) ((long) x * cropWidth / width);
+                float depthValue = depth.get(sourceY * sourceWidth + sourceX);
+                float distance = far * near / Math.max(0.000001F, far - depthValue * (far - near));
+                mask[y * width + x] = distance <= threshold ? 1.0F : 0.0F;
+            }
+        }
+        return mask;
+    }
+
+    /**
      * Runs after the player's world is rendered and before the hand/HUD. Copies the whole camera
      * frame out, puts the previous player frame back and restores the player camera for the
      * hand/HUD passes. The player therefore never sees the camera frame.
@@ -312,7 +361,11 @@ public final class CameraCapturePipeline {
                 PboFrameReader reader = capture.session.reader(capture.width, capture.height);
                 capture.session.path = CapturePath.MAIN_TARGET;
                 capture.session.detail = "whole-frame camera capture; previous player frame held";
-                issued = reader.requestFramebufferRead(target.frameBufferId());
+                boolean thermalLook = !capture.camera.config().color()
+                        && capture.camera.config().nightVision();
+                issued = reader.requestFramebufferRead(target.frameBufferId(),
+                        thermalLook ? this.readProximityMask(minecraft, capture.width, capture.height)
+                                : null);
             } else {
                 capture.session.detail = "skipped: could not copy the main frame";
             }
