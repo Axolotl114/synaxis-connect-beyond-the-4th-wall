@@ -153,7 +153,7 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
     }
 
     private static void fill(NativeImage image, CameraFrame frame, CameraConfig config,
-                             double aspect, int opacity, int TEX_SIZE) {
+                             double aspect, int opacity, int tierSize) {
         int alpha = Math.max(0, Math.min(255, (int) Math.round(opacity * 2.55D)));
         int background = alpha << 24;
         for (int y = 0; y < TEX_SIZE; y++) {
@@ -174,7 +174,7 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         boolean colour = config.color();
         boolean green = !colour && config.green();
         boolean nightVision = config.nightVision();
-        int tier = Math.max(32, Math.min(512, texSize));
+        int tier = Math.max(32, Math.min(512, tierSize));
         int grid = Math.max(1, TEX_SIZE / tier);
         for (int y = 0; y < height; y++) {
             int coarseY = (y / grid) * grid;
