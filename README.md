@@ -174,19 +174,12 @@ local event, port, value = os.pullEvent("cc_virtual_coms")
 
 ## 致谢
 
-本模组的显示名是 **Synaxis: Connect beyond the 4th Wall**，其中「Synaxis」是在致敬上游的 **Synaxis** 模组。
+本模组的显示名是 **Synaxis: Connect beyond the 4th Wall**。
 
-- **GUI 贴图**复用自 **Rew1nd** 的 **Synaxis** 模组（modId `synaxis`，许可 "All Rights Reserved"），**已获原作者授权**；版权归原作者，不受本模组 MIT 许可覆盖。
-- **方块模型与方块贴图**（`base` / `pins` / `chip`）是以 Synaxis 原作为参考**重新绘制/重新上色**的衍生作品，与原件存在实质差异（对 `synaxis-1.4.3.jar` 内原版逐像素比对：`pins` 256/256 = **100%**（完全重画）、`base` 251/256 = **98.05%**、`chip` 1055/4096 = **25.76%**），不是原文件。
-- **图传摄像头**（`camera_transmitter`）等新增方块**不复用** Synaxis 的方块模型/方块贴图：方块模型只以资源位置引用原版 `minecraft:block/observer`，不额外打包任何方块贴图。
 - 基于 **Synaxis**、**CC:Tweaked** 与 **Create** 构建。
 - 依赖链：**Sable** / **LDLib2** / **Create Aeronautics**。
-
-> 第三方美术素材的完整法律声明见 [LICENSE](LICENSE)。
 
 ## 许可
 
 MIT —— 详见 [LICENSE](LICENSE)。
-
-注意：第三方美术素材（Synaxis GUI 贴图与由其衍生的方块贴图）**不在** MIT 许可范围内，详见 [LICENSE](LICENSE) 的「第三方美术素材」一节。
 
