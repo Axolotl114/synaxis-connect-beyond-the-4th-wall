@@ -343,7 +343,7 @@ public final class CameraCapturePipeline {
             }
             com.mojang.blaze3d.vertex.PoseStack pose = new com.mojang.blaze3d.vertex.PoseStack();
             org.joml.Quaternionf maskRotation = new org.joml.Quaternionf().rotationYXZ(
-                    (float) Math.toRadians(this.captureYaw) - (float) Math.PI,
+                    -(float) Math.toRadians(this.captureYaw) - (float) Math.PI,
                     (float) Math.toRadians(this.capturePitch),
                     (float) Math.toRadians(this.captureRoll));
             pose.mulPose(maskRotation);
