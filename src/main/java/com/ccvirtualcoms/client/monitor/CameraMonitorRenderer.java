@@ -139,7 +139,7 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         Long previous = FRAMES.get(key);
         long now = System.nanoTime();
         long last = LAST_UPLOAD.getOrDefault(key, 0L);
-        long interval = 150_000_000L;
+        long interval = 33_000_000L;
         if ((previous == null || previous != signature) && now - last >= interval) {
             LAST_UPLOAD.put(key, now);
             FRAMES.put(key, signature);

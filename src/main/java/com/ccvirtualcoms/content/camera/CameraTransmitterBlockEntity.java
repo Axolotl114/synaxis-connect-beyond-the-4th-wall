@@ -594,6 +594,7 @@ public class CameraTransmitterBlockEntity extends BlockEntity
         this.eulerPitch = clampPitch(pitch);
         this.eulerRoll = normalizeRoll(roll);
         this.revision++;
+        this.setChanged();
         this.setStatus("Camera angles edited");
         this.broadcastStatus();
     }
