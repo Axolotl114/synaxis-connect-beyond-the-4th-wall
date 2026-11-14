@@ -250,7 +250,9 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
 
         @SubscribeEvent
         public static void onRegisterRenderers(EntityRenderersEvent.RegisterRenderers event) {
-            event.registerBlockEntityRenderer(CCVirtualComsRegistry.CAMERA_TRANSMITTER_BE.get(),
+            event.registerBlockEntityRenderer(CCVirtualComsRegistry.CAMERA_MONITOR_BE.get(),
+                com.ccvirtualcoms.client.monitor.CameraMonitorRenderer::new);
+        event.registerBlockEntityRenderer(CCVirtualComsRegistry.CAMERA_TRANSMITTER_BE.get(),
                     CameraTransmitterRenderer::new);
         }
     }

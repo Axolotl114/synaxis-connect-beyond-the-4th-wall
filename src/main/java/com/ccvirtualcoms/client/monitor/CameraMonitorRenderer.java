@@ -73,10 +73,14 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         VertexConsumer consumer = buffers.getBuffer(RenderType.text(textureId));
         float z = 1.0F;
         float inset = 0.0625F;
-        vertex(consumer, matrix, inset, 1.0F - inset, z, u0, v0, light, overlay);
-        vertex(consumer, matrix, 1.0F - inset, 1.0F - inset, z, u1, v0, light, overlay);
-        vertex(consumer, matrix, 1.0F - inset, inset, z, u1, v1, light, overlay);
-        vertex(consumer, matrix, inset, inset, z, u0, v1, light, overlay);
+        float insetLeft = column == 0 ? inset : 0.0F;
+        float insetRight = column == width - 1 ? inset : 0.0F;
+        float insetTop = row == 0 ? inset : 0.0F;
+        float insetBottom = row == height - 1 ? inset : 0.0F;
+        vertex(consumer, matrix, insetLeft, 1.0F - insetTop, z, u0, v0, light, overlay);
+        vertex(consumer, matrix, 1.0F - insetRight, 1.0F - insetTop, z, u1, v0, light, overlay);
+        vertex(consumer, matrix, 1.0F - insetRight, insetBottom, z, u1, v1, light, overlay);
+        vertex(consumer, matrix, insetLeft, insetBottom, z, u0, v1, light, overlay);
         pose.popPose();
     }
 

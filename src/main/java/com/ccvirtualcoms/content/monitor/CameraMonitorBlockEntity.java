@@ -104,7 +104,8 @@ public class CameraMonitorBlockEntity extends BlockEntity {
             maxA = Math.max(maxA, a);
             minB = Math.min(minB, b);
             maxB = Math.max(maxB, b);
-            for (Direction direction : Direction.Plane.HORIZONTAL) {
+            for (Direction direction : new Direction[]{
+                    Direction.UP, Direction.DOWN, right, right.getOpposite()}) {
                 BlockPos next = pos.relative(direction);
                 if (seen.containsKey(next)) {
                     continue;
