@@ -43,6 +43,12 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         if (!projector.enabled() || projector.cameraPos() == null) {
             return;
         }
+        // Never draw screens into a camera capture frame: the camera would see its own picture
+        // and create recursive picture-in-picture feedback.
+        if (com.ccvirtualcoms.client.camera.capture.CameraCapturePipeline.get()
+                .cameraOverride() != null) {
+            return;
+        }
         org.joml.Vector3f cameraPos = Minecraft.getInstance().gameRenderer.getMainCamera()
                 .getPosition().toVector3f();
         double dx = projector.getBlockPos().getX() + 0.5D + projector.offsetX() - cameraPos.x;
@@ -72,7 +78,8 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         // much farther away. 48 blocks per block of screen diagonal, clamped to a sane range.
         double diagonal = Math.sqrt(projector.projectorWidth() * projector.projectorWidth()
                 + projector.projectorHeight() * projector.projectorHeight());
-        double disappearDistance = Math.max(32.0D, Math.min(1024.0D, diagonal * 48.0D));
+        double disappearDistance = diagonal / (2.0D * Math.tan(Math.toRadians(4.0D)));
+        disappearDistance = Math.max(8.0D, Math.min(1024.0D, disappearDistance));
         if (distance > disappearDistance) {
             return;
         }
@@ -132,7 +139,7 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         Long previous = FRAMES.get(key);
         long now = System.nanoTime();
         long last = LAST_UPLOAD.getOrDefault(key, 0L);
-        long interval = texSize >= 256 ? 66_000_000L : 100_000_000L;
+        long interval = 150_000_000L;
         if ((previous == null || previous != signature) && now - last >= interval) {
             LAST_UPLOAD.put(key, now);
             FRAMES.put(key, signature);

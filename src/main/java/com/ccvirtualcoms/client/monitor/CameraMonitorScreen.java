@@ -163,7 +163,7 @@ public class CameraMonitorScreen extends Screen {
 
     @Override
     public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        graphics.fill(0, 0, this.width, this.height, 0x70000000);
+        graphics.fill(0, 0, this.width, this.height, 0x50000000);
     }
 
     @Override
