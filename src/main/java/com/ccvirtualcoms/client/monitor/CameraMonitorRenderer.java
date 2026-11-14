@@ -48,15 +48,19 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         double dy = projector.getBlockPos().getY() + 0.5D + projector.offsetY() - cameraPos.y;
         double dz = projector.getBlockPos().getZ() + 0.5D + projector.offsetZ() - cameraPos.z;
         double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        double apparent = projector.projectorWidth() * projector.projectorHeight()
-                / Math.max(1.0D, distance * distance);
-        int texSize = apparent > 40.0D ? 512 : apparent > 10.0D ? 256 : apparent > 2.0D ? 128 : 64;
+        // Estimated on-screen height in pixels (1080p-ish viewport): screenHeight / distance.
+        double pixelHeight = projector.projectorHeight() / Math.max(0.05D, distance) * 720.0D;
+        int texSize = pixelHeight > 260.0D ? 256 : pixelHeight > 130.0D ? 128
+                : pixelHeight > 65.0D ? 64 : 32;
+        if (pixelHeight < 3.0D) {
+            return;
+        }
         // Disappear distance scales with the physical screen size: bigger screens stay visible
         // much farther away. 48 blocks per block of screen diagonal, clamped to a sane range.
         double diagonal = Math.sqrt(projector.projectorWidth() * projector.projectorWidth()
                 + projector.projectorHeight() * projector.projectorHeight());
         double disappearDistance = Math.max(32.0D, Math.min(1024.0D, diagonal * 48.0D));
-        if (distance > disappearDistance || apparent < 0.05D) {
+        if (distance > disappearDistance) {
             return;
         }
         CapturedCamera camera = CameraCaptureRuntime.get().camera(projector.cameraPos().asLong());
@@ -120,7 +124,7 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         Long previous = FRAMES.get(key);
         long now = System.nanoTime();
         long last = LAST_UPLOAD.getOrDefault(key, 0L);
-        long interval = texSize >= 512 ? 33_000_000L : texSize >= 256 ? 50_000_000L : 100_000_000L;
+        long interval = texSize >= 256 ? 66_000_000L : 100_000_000L;
         if ((previous == null || previous != signature) && now - last >= interval) {
             LAST_UPLOAD.put(key, now);
             FRAMES.put(key, signature);
