@@ -28,9 +28,10 @@ import com.mojang.math.Axis;
 /** Draws the projector's floating camera screen in the air. */
 public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorBlockEntity> {
 
-    private static final Map<Long, DynamicTexture> texSizeTURES = new HashMap<>();
+    private static final Map<Long, DynamicTexture> TEXTURES = new HashMap<>();
     private static final Map<Long, Long> FRAMES = new HashMap<>();
-    private static final Map<Long, Integer> SIZES = new HashMap<>();
+    private static final int TEX_SIZE = 512;
+    private static final Map<Long, Integer> QUALITY = new HashMap<>();
     private static final Map<Long, Long> LAST_UPLOAD = new HashMap<>();
 
     public CameraMonitorRenderer(BlockEntityRendererProvider.Context context) {
@@ -50,11 +51,23 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
         // Estimated on-screen height in pixels (1080p-ish viewport): screenHeight / distance.
         double pixelHeight = projector.projectorHeight() / Math.max(0.05D, distance) * 720.0D;
-        int texSize = pixelHeight > 260.0D ? 256 : pixelHeight > 130.0D ? 128
-                : pixelHeight > 65.0D ? 64 : 32;
+        int desired = pixelHeight > 260.0D ? 512 : pixelHeight > 130.0D ? 256
+                : pixelHeight > 65.0D ? 128 : 64;
         if (pixelHeight < 3.0D) {
             return;
         }
+        long projectorKey = projector.getBlockPos().asLong();
+        Integer previousQuality = QUALITY.get(projectorKey);
+        int texSize = desired;
+        if (previousQuality != null) {
+            // Hysteresis: keep the old tier unless the new one is 1.6x larger/smaller.
+            if (desired > previousQuality && pixelHeight < previousQuality * 1.6D * 1.0D) {
+                texSize = previousQuality;
+            } else if (desired < previousQuality && pixelHeight > previousQuality / 1.6D) {
+                texSize = previousQuality;
+            }
+        }
+        QUALITY.put(projectorKey, texSize);
         // Disappear distance scales with the physical screen size: bigger screens stay visible
         // much farther away. 48 blocks per block of screen diagonal, clamped to a sane range.
         double diagonal = Math.sqrt(projector.projectorWidth() * projector.projectorWidth()
@@ -108,16 +121,11 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         long key = projector.getBlockPos().asLong();
         ResourceLocation id = ResourceLocation.fromNamespaceAndPath(CCVirtualComs.MOD_ID,
                 "projector/" + Long.toHexString(key));
-        DynamicTexture texture = texSizeTURES.get(key);
-        Integer previousSize = SIZES.get(key);
-        if (texture == null || previousSize == null || previousSize != texSize) {
-            if (texture != null) {
-                Minecraft.getInstance().getTextureManager().release(id);
-            }
-            texture = new DynamicTexture(texSize, texSize, true);
+        DynamicTexture texture = TEXTURES.get(key);
+        if (texture == null) {
+            texture = new DynamicTexture(TEX_SIZE, TEX_SIZE, true);
             Minecraft.getInstance().getTextureManager().register(id, texture);
-            texSizeTURES.put(key, texture);
-            SIZES.put(key, texSize);
+            TEXTURES.put(key, texture);
             FRAMES.put(key, Long.MIN_VALUE);
         }
         long signature = (frame == null ? -1L : frame.sequence()) * 1000L + opacity;
@@ -138,11 +146,11 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
     }
 
     private static void fill(NativeImage image, CameraFrame frame, CameraConfig config,
-                             double aspect, int opacity, int texSize) {
+                             double aspect, int opacity, int TEX_SIZE) {
         int alpha = Math.max(0, Math.min(255, (int) Math.round(opacity * 2.55D)));
         int background = alpha << 24;
-        for (int y = 0; y < texSize; y++) {
-            for (int x = 0; x < texSize; x++) {
+        for (int y = 0; y < TEX_SIZE; y++) {
+            for (int x = 0; x < TEX_SIZE; x++) {
                 image.setPixelRGBA(x, y, background);
             }
         }
@@ -152,10 +160,10 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         double imageAspect = (double) frame.width() / (double) frame.height();
         double drawWidth = imageAspect > aspect ? 1.0D : imageAspect / aspect;
         double drawHeight = imageAspect > aspect ? aspect / imageAspect : 1.0D;
-        int offsetX = (int) Math.round((1.0D - drawWidth) * texSize / 2.0D);
-        int offsetY = (int) Math.round((1.0D - drawHeight) * texSize / 2.0D);
-        int width = Math.max(1, (int) Math.round(drawWidth * texSize));
-        int height = Math.max(1, (int) Math.round(drawHeight * texSize));
+        int offsetX = (int) Math.round((1.0D - drawWidth) * TEX_SIZE / 2.0D);
+        int offsetY = (int) Math.round((1.0D - drawHeight) * TEX_SIZE / 2.0D);
+        int width = Math.max(1, (int) Math.round(drawWidth * TEX_SIZE));
+        int height = Math.max(1, (int) Math.round(drawHeight * TEX_SIZE));
         boolean colour = config.color();
         boolean green = !colour && config.green();
         boolean nightVision = config.nightVision();

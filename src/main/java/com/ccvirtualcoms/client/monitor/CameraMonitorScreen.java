@@ -77,9 +77,10 @@ public class CameraMonitorScreen extends Screen {
             this.fields[i] = box;
             this.addRenderableWidget(box);
         }
-        this.addRenderableWidget(Button.builder(Component.translatable("gui.done"),
-                button -> this.onClose()).bounds(controlX, this.top + CameraGuiStyle.PANEL_HEIGHT - 24,
-                controlWidth, CameraGuiStyle.ROW_HEIGHT).build());
+        this.addRenderableWidget(com.ccvirtualcoms.client.gui.SynaxisBoardButton.flat(
+                Component.translatable("gui.done"), button -> this.onClose())
+                .bounds(controlX, this.top + CameraGuiStyle.PANEL_HEIGHT - 24,
+                        controlWidth, CameraGuiStyle.ROW_HEIGHT).build());
     }
 
     private int rowY(int row) {
@@ -162,7 +163,7 @@ public class CameraMonitorScreen extends Screen {
 
     @Override
     public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        graphics.fill(0, 0, this.width, this.height, 0xC0101018);
+        graphics.fill(0, 0, this.width, this.height, 0x70000000);
     }
 
     @Override
