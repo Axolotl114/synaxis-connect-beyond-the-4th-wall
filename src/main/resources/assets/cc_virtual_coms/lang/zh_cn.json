@@ -119,5 +119,7 @@
   "cc_virtual_coms.monitor.on": "画面：开",
   "cc_virtual_coms.monitor.off": "画面：关",
   "cc_virtual_coms.monitor.none": "未选择摄像头",
-  "cc_virtual_coms.monitor.hint": "选择摄像头并开关画面"
+  "cc_virtual_coms.monitor.hint": "选择摄像头并开关画面",
+  "cc_virtual_coms.monitor.camera": "摄像头",
+  "cc_virtual_coms.monitor.display": "画面"
 }

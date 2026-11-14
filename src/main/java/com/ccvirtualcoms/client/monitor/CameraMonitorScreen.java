@@ -3,6 +3,7 @@ package com.ccvirtualcoms.client.monitor;
 import com.ccvirtualcoms.client.camera.capture.CameraCaptureRuntime;
 import com.ccvirtualcoms.client.camera.capture.CapturedCamera;
 import com.ccvirtualcoms.client.gui.CameraCycleButton;
+import com.ccvirtualcoms.client.gui.CameraGuiStyle;
 import com.ccvirtualcoms.client.gui.CameraToggleButton;
 import com.ccvirtualcoms.content.monitor.CameraMonitorBlockEntity;
 import java.util.ArrayList;
@@ -10,32 +11,37 @@ import java.util.Comparator;
 import java.util.List;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 
-/** Configuration screen for one merged camera-monitor wall. */
+/** Synaxis-style configuration screen for one video projector. */
 public class CameraMonitorScreen extends Screen {
 
-    private final CameraMonitorBlockEntity monitor;
+    private static final String[] FIELD_LABELS = {"W", "H", "X", "Y", "Z", "Yaw", "Pitch", "Alpha"};
+
+    private final CameraMonitorBlockEntity projector;
     private final List<BlockPos> cameras = new ArrayList<>();
+    private final EditBox[] fields = new EditBox[8];
     private int selected = -1;
     private boolean enabled;
-    private final net.minecraft.client.gui.components.EditBox[] fields =
-            new net.minecraft.client.gui.components.EditBox[8];
-    private BlockPos masterPos;
+    private BlockPos targetPos;
+    private int left;
+    private int top;
 
-    public CameraMonitorScreen(CameraMonitorBlockEntity monitor) {
+    public CameraMonitorScreen(CameraMonitorBlockEntity projector) {
         super(Component.translatable("cc_virtual_coms.monitor.title"));
-        this.monitor = monitor;
+        this.projector = projector;
     }
 
     @Override
     protected void init() {
-        CameraMonitorBlockEntity master = this.monitor.master();
-        CameraMonitorBlockEntity target = master == null ? this.monitor : master;
-        this.masterPos = target.getBlockPos();
+        CameraMonitorBlockEntity target = this.projector;
+        this.targetPos = target.getBlockPos();
         this.enabled = target.enabled();
+        this.left = Math.max(2, (this.width - CameraGuiStyle.PANEL_WIDTH) / 2);
+        this.top = Math.max(2, (this.height - CameraGuiStyle.PANEL_HEIGHT) / 2);
         this.cameras.clear();
         for (CapturedCamera camera : CameraCaptureRuntime.get().cameras()) {
             this.cameras.add(camera.pos());
@@ -44,34 +50,40 @@ public class CameraMonitorScreen extends Screen {
         if (target.cameraPos() != null) {
             this.selected = this.cameras.indexOf(target.cameraPos());
         }
-        int centerX = this.width / 2;
-        int y = this.height / 2 - 40;
-        this.addRenderableWidget(new CameraCycleButton(centerX - 100, y, 200, 20, Component.empty(),
-                this::cameraLabel, this::cycleCamera));
-        this.addRenderableWidget(new CameraToggleButton(centerX - 100, y + 28, 200, 20,
-                Component.empty(), () -> this.enabled,
+        int controlX = this.left + CameraGuiStyle.CONTROL_X;
+        int controlWidth = CameraGuiStyle.CONTROL_WIDTH;
+        this.addRenderableWidget(new CameraCycleButton(controlX, this.rowY(0), controlWidth,
+                CameraGuiStyle.ROW_HEIGHT, Component.empty(), this::cameraLabel, this::cycleCamera));
+        this.addRenderableWidget(new CameraToggleButton(controlX, this.rowY(1), controlWidth,
+                CameraGuiStyle.ROW_HEIGHT, Component.empty(), () -> this.enabled,
                 () -> Component.translatable("cc_virtual_coms.monitor.on"),
                 () -> Component.translatable("cc_virtual_coms.monitor.off"), this::toggle));
         String[] values = {
-                Double.toString(this.monitor.projectorWidth()),
-                Double.toString(this.monitor.projectorHeight()),
-                Double.toString(this.monitor.offsetX()),
-                Double.toString(this.monitor.offsetY()),
-                Double.toString(this.monitor.offsetZ()),
-                Double.toString(this.monitor.yawDegrees()),
-                Double.toString(this.monitor.pitchDegrees()),
-                Integer.toString(this.monitor.opacity())
+                Double.toString(this.projector.projectorWidth()),
+                Double.toString(this.projector.projectorHeight()),
+                Double.toString(this.projector.offsetX()),
+                Double.toString(this.projector.offsetY()),
+                Double.toString(this.projector.offsetZ()),
+                Double.toString(this.projector.yawDegrees()),
+                Double.toString(this.projector.pitchDegrees()),
+                Integer.toString(this.projector.opacity())
         };
         for (int i = 0; i < this.fields.length; i++) {
-            net.minecraft.client.gui.components.EditBox box = new net.minecraft.client.gui.components.EditBox(
-                    this.font, centerX - 100 + (i % 2) * 102, y + 96 + (i / 2) * 20, 98, 16,
-                    Component.empty());
+            EditBox box = new EditBox(this.font, controlX + 2, this.rowY(2 + i) + 1,
+                    controlWidth - 4, CameraGuiStyle.INPUT_HEIGHT - 2, Component.empty());
+            box.setBordered(false);
+            box.setTextColor(CameraGuiStyle.COLOR_VALUE);
             box.setValue(values[i]);
             this.fields[i] = box;
             this.addRenderableWidget(box);
         }
         this.addRenderableWidget(Button.builder(Component.translatable("gui.done"),
-                button -> this.onClose()).bounds(centerX - 100, y + 60, 200, 20).build());
+                button -> this.onClose()).bounds(controlX, this.top + CameraGuiStyle.PANEL_HEIGHT - 24,
+                controlWidth, CameraGuiStyle.ROW_HEIGHT).build());
+    }
+
+    private int rowY(int row) {
+        return this.top + CameraGuiStyle.CONTENT_Y + row * CameraGuiStyle.ROW_PITCH;
     }
 
     private Component cameraLabel() {
@@ -105,18 +117,17 @@ public class CameraMonitorScreen extends Screen {
     private void send() {
         BlockPos camera = this.selected >= 0 && this.selected < this.cameras.size()
                 ? this.cameras.get(this.selected) : null;
-        double width = this.field(0, this.monitor.projectorWidth());
-        double height = this.field(1, this.monitor.projectorHeight());
         net.neoforged.neoforge.network.PacketDistributor.sendToServer(
-                new com.ccvirtualcoms.net.MonitorConfigPayload(this.masterPos, camera != null,
+                new com.ccvirtualcoms.net.MonitorConfigPayload(this.targetPos, camera != null,
                         camera == null ? 0L : camera.asLong(), this.enabled,
-                        width, height,
-                        this.field(2, this.monitor.offsetX()),
-                        this.field(3, this.monitor.offsetY()),
-                        this.field(4, this.monitor.offsetZ()),
-                        this.field(5, this.monitor.yawDegrees()),
-                        this.field(6, this.monitor.pitchDegrees()),
-                        (int) Math.round(this.field(7, this.monitor.opacity()))));
+                        this.field(0, this.projector.projectorWidth()),
+                        this.field(1, this.projector.projectorHeight()),
+                        this.field(2, this.projector.offsetX()),
+                        this.field(3, this.projector.offsetY()),
+                        this.field(4, this.projector.offsetZ()),
+                        this.field(5, this.projector.yawDegrees()),
+                        this.field(6, this.projector.pitchDegrees()),
+                        (int) Math.round(this.field(7, this.projector.opacity()))));
     }
 
     @Override
@@ -128,19 +139,25 @@ public class CameraMonitorScreen extends Screen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         this.renderBackground(graphics, mouseX, mouseY, partialTick);
-        int x0 = this.width / 2 - 120;
-        int y0 = this.height / 2 - 60;
-        graphics.fill(x0, y0, x0 + 240, y0 + 130, 0xF23C3C44);
-        graphics.fill(x0, y0, x0 + 240, y0 + 24, 0xFF2E2E36);
-        graphics.drawString(this.font, this.title, x0 + 8, y0 + 8, 0xFFF2F2F5, false);
-        super.render(graphics, mouseX, mouseY, partialTick);
-        String[] labels = {"W", "H", "X", "Y", "Z", "Yaw", "Pitch", "Alpha"};
-        for (int i = 0; i < this.fields.length && this.fields[i] != null; i++) {
-            graphics.drawString(this.font, labels[i], this.fields[i].getX() + 1,
-                    this.fields[i].getY() - 9, 0xFFC2C2CA, false);
+        CameraGuiStyle.drawWindow(graphics, this.left, this.top);
+        CameraGuiStyle.label(graphics, this.font, this.title, this.left + CameraGuiStyle.CONTENT_X,
+                this.top + 10);
+        for (int i = 0; i < this.fields.length; i++) {
+            int y = this.rowY(2 + i);
+            CameraGuiStyle.muted(graphics, this.font,
+                    Component.literal(FIELD_LABELS[i]),
+                    this.left + CameraGuiStyle.CONTENT_X, y + 2);
+            CameraGuiStyle.numberInputBackground(graphics,
+                    this.left + CameraGuiStyle.CONTROL_X, y,
+                    CameraGuiStyle.CONTROL_WIDTH, CameraGuiStyle.INPUT_HEIGHT);
         }
-        graphics.drawString(this.font, Component.translatable("cc_virtual_coms.monitor.hint"),
-                x0 + 8, y0 + 112, 0xFFC2C2CA, false);
+        CameraGuiStyle.muted(graphics, this.font,
+                Component.translatable("cc_virtual_coms.monitor.camera"),
+                this.left + CameraGuiStyle.CONTENT_X, this.rowY(0) + 2);
+        CameraGuiStyle.muted(graphics, this.font,
+                Component.translatable("cc_virtual_coms.monitor.display"),
+                this.left + CameraGuiStyle.CONTENT_X, this.rowY(1) + 2);
+        super.render(graphics, mouseX, mouseY, partialTick);
     }
 
     @Override

@@ -119,5 +119,7 @@
   "cc_virtual_coms.monitor.on": "Display: ON",
   "cc_virtual_coms.monitor.off": "Display: OFF",
   "cc_virtual_coms.monitor.none": "No camera",
-  "cc_virtual_coms.monitor.hint": "Select a camera and toggle the picture"
+  "cc_virtual_coms.monitor.hint": "Select a camera and toggle the picture",
+  "cc_virtual_coms.monitor.camera": "Camera",
+  "cc_virtual_coms.monitor.display": "Picture"
 }

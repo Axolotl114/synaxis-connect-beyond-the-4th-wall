@@ -28,9 +28,10 @@ import com.mojang.math.Axis;
 /** Draws the projector's floating camera screen in the air. */
 public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorBlockEntity> {
 
-    private static final int TEX = 512;
-    private static final Map<Long, DynamicTexture> TEXTURES = new HashMap<>();
+    private static final Map<Long, DynamicTexture> texSizeTURES = new HashMap<>();
     private static final Map<Long, Long> FRAMES = new HashMap<>();
+    private static final Map<Long, Integer> SIZES = new HashMap<>();
+    private static final Map<Long, Long> LAST_UPLOAD = new HashMap<>();
 
     public CameraMonitorRenderer(BlockEntityRendererProvider.Context context) {
     }
@@ -41,12 +42,25 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         if (!projector.enabled() || projector.cameraPos() == null) {
             return;
         }
+        org.joml.Vector3f cameraPos = Minecraft.getInstance().gameRenderer.getMainCamera()
+                .getPosition().toVector3f();
+        double dx = projector.getBlockPos().getX() + 0.5D + projector.offsetX() - cameraPos.x;
+        double dy = projector.getBlockPos().getY() + 0.5D + projector.offsetY() - cameraPos.y;
+        double dz = projector.getBlockPos().getZ() + 0.5D + projector.offsetZ() - cameraPos.z;
+        double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        double apparent = projector.projectorWidth() * projector.projectorHeight()
+                / Math.max(1.0D, distance * distance);
+        int texSize = apparent > 40.0D ? 512 : apparent > 10.0D ? 256 : apparent > 2.0D ? 128 : 64;
+        if (distance > 256.0D || apparent < 0.05D) {
+            return;
+        }
         CapturedCamera camera = CameraCaptureRuntime.get().camera(projector.cameraPos().asLong());
         CameraFrame frame = camera == null ? null : camera.latestFrame();
         CameraConfig config = camera == null ? CameraConfig.DEFAULT : camera.config();
         float width = (float) projector.projectorWidth();
         float height = (float) projector.projectorHeight();
-        ResourceLocation texture = upload(projector, frame, config, width / height, projector.opacity());
+        ResourceLocation texture = upload(projector, frame, config, width / height,
+                projector.opacity(), texSize);
         BlockState state = projector.getBlockState();
         Direction facing = state.getOptionalValue(CameraMonitorBlock.FACING).orElse(Direction.SOUTH);
         pose.pushPose();
@@ -76,24 +90,34 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
     }
 
     private static ResourceLocation upload(CameraMonitorBlockEntity projector, CameraFrame frame,
-                                          CameraConfig config, double aspect, int opacity) {
+                                          CameraConfig config, double aspect, int opacity,
+                                          int texSize) {
         long key = projector.getBlockPos().asLong();
         ResourceLocation id = ResourceLocation.fromNamespaceAndPath(CCVirtualComs.MOD_ID,
                 "projector/" + Long.toHexString(key));
-        DynamicTexture texture = TEXTURES.get(key);
-        if (texture == null) {
-            texture = new DynamicTexture(TEX, TEX, true);
+        DynamicTexture texture = texSizeTURES.get(key);
+        Integer previousSize = SIZES.get(key);
+        if (texture == null || previousSize == null || previousSize != texSize) {
+            if (texture != null) {
+                Minecraft.getInstance().getTextureManager().release(id);
+            }
+            texture = new DynamicTexture(texSize, texSize, true);
             Minecraft.getInstance().getTextureManager().register(id, texture);
-            TEXTURES.put(key, texture);
+            texSizeTURES.put(key, texture);
+            SIZES.put(key, texSize);
             FRAMES.put(key, Long.MIN_VALUE);
         }
         long signature = (frame == null ? -1L : frame.sequence()) * 1000L + opacity;
         Long previous = FRAMES.get(key);
-        if (previous == null || previous != signature) {
+        long now = System.nanoTime();
+        long last = LAST_UPLOAD.getOrDefault(key, 0L);
+        long interval = texSize >= 512 ? 33_000_000L : texSize >= 256 ? 50_000_000L : 100_000_000L;
+        if ((previous == null || previous != signature) && now - last >= interval) {
+            LAST_UPLOAD.put(key, now);
             FRAMES.put(key, signature);
             NativeImage image = texture.getPixels();
             if (image != null) {
-                fill(image, frame, config, aspect, opacity);
+                fill(image, frame, config, aspect, opacity, texSize);
                 texture.upload();
             }
         }
@@ -101,11 +125,11 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
     }
 
     private static void fill(NativeImage image, CameraFrame frame, CameraConfig config,
-                             double aspect, int opacity) {
+                             double aspect, int opacity, int texSize) {
         int alpha = Math.max(0, Math.min(255, (int) Math.round(opacity * 2.55D)));
         int background = alpha << 24;
-        for (int y = 0; y < TEX; y++) {
-            for (int x = 0; x < TEX; x++) {
+        for (int y = 0; y < texSize; y++) {
+            for (int x = 0; x < texSize; x++) {
                 image.setPixelRGBA(x, y, background);
             }
         }
@@ -115,10 +139,10 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         double imageAspect = (double) frame.width() / (double) frame.height();
         double drawWidth = imageAspect > aspect ? 1.0D : imageAspect / aspect;
         double drawHeight = imageAspect > aspect ? aspect / imageAspect : 1.0D;
-        int offsetX = (int) Math.round((1.0D - drawWidth) * TEX / 2.0D);
-        int offsetY = (int) Math.round((1.0D - drawHeight) * TEX / 2.0D);
-        int width = Math.max(1, (int) Math.round(drawWidth * TEX));
-        int height = Math.max(1, (int) Math.round(drawHeight * TEX));
+        int offsetX = (int) Math.round((1.0D - drawWidth) * texSize / 2.0D);
+        int offsetY = (int) Math.round((1.0D - drawHeight) * texSize / 2.0D);
+        int width = Math.max(1, (int) Math.round(drawWidth * texSize));
+        int height = Math.max(1, (int) Math.round(drawHeight * texSize));
         boolean colour = config.color();
         boolean green = !colour && config.green();
         boolean nightVision = config.nightVision();
