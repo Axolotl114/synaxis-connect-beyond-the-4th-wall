@@ -61,59 +61,128 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         }
         BlockState state = level.getBlockState(monitorPos);
         Direction facing = facingOf(state);
-        int[] wall = measureWall(level, monitorPos, state, facing);
-        int width = wall[0];
-        int height = wall[1];
-        int column = wall[2];
-        int row = wall[3];
+        java.util.List<BlockPos> tiles = wallTiles(level, monitorPos, state, facing);
+        int width = wallWidth;
+        int height = wallHeight;
+        int baseA = wallMinA;
+        int baseB = wallMinB;
+        int column = wallColumn;
+        int row = wallRow;
         CapturedCamera camera = CameraCaptureRuntime.get().camera(receiver.cameraPos().asLong());
         CameraFrame frame = camera == null ? null : camera.latestFrame();
         CameraConfig config = camera == null ? CameraConfig.DEFAULT : camera.config();
         ResourceLocation texture = upload(receiver.getBlockPos(), frame, config, width, height);
         pose.pushPose();
-        BlockPos delta = monitorPos.subtract(receiver.getBlockPos());
-        pose.translate(delta.getX(), delta.getY(), delta.getZ());
+        BlockPos first = tiles.isEmpty() ? monitorPos : tiles.get(0);
+        int minX = Integer.MAX_VALUE;
+        int minY = Integer.MAX_VALUE;
+        int minZ = Integer.MAX_VALUE;
+        for (BlockPos tile : tiles) {
+            minX = Math.min(minX, tile.getX());
+            minY = Math.min(minY, tile.getY());
+            minZ = Math.min(minZ, tile.getZ());
+        }
+        pose.translate(minX - receiver.getBlockPos().getX(),
+                minY - receiver.getBlockPos().getY(),
+                minZ - receiver.getBlockPos().getZ());
         Matrix4f matrix = pose.last().pose();
         VertexConsumer consumer = buffers.getBuffer(RenderType.text(texture));
         float inset = 0.0625F;
-        float x0 = (column == 0 ? inset : 0.0F);
-        float x1 = (column == width - 1 ? 1.0F - inset : 1.0F);
-        float y0 = (row == height - 1 ? inset : 0.0F);
-        float y1 = (row == 0 ? 1.0F - inset : 1.0F);
-        float u0 = (float) column / width;
-        float u1 = (float) (column + 1) / width;
-        float v0 = (float) row / height;
-        float v1 = (float) (row + 1) / height;
         int fullLight = LightTexture.FULL_BRIGHT;
-        switch (facing) {
-            case SOUTH -> {
-                vertex(consumer, matrix, x0, y1, 1.001F, u0, v0, fullLight, overlay);
-                vertex(consumer, matrix, x1, y1, 1.001F, u1, v0, fullLight, overlay);
-                vertex(consumer, matrix, x1, y0, 1.001F, u1, v1, fullLight, overlay);
-                vertex(consumer, matrix, x0, y0, 1.001F, u0, v1, fullLight, overlay);
-            }
-            case NORTH -> {
-                vertex(consumer, matrix, x1, y1, -0.001F, u0, v0, fullLight, overlay);
-                vertex(consumer, matrix, x0, y1, -0.001F, u1, v0, fullLight, overlay);
-                vertex(consumer, matrix, x0, y0, -0.001F, u1, v1, fullLight, overlay);
-                vertex(consumer, matrix, x1, y0, -0.001F, u0, v1, fullLight, overlay);
-            }
-            case EAST -> {
-                vertex(consumer, matrix, 1.001F, y1, x1, u0, v0, fullLight, overlay);
-                vertex(consumer, matrix, 1.001F, y1, x0, u1, v0, fullLight, overlay);
-                vertex(consumer, matrix, 1.001F, y0, x0, u1, v1, fullLight, overlay);
-                vertex(consumer, matrix, 1.001F, y0, x1, u0, v1, fullLight, overlay);
-            }
-            case WEST -> {
-                vertex(consumer, matrix, -0.001F, y1, x0, u0, v0, fullLight, overlay);
-                vertex(consumer, matrix, -0.001F, y1, x1, u1, v0, fullLight, overlay);
-                vertex(consumer, matrix, -0.001F, y0, x1, u1, v1, fullLight, overlay);
-                vertex(consumer, matrix, -0.001F, y0, x0, u0, v1, fullLight, overlay);
-            }
-            default -> {
+        Direction right = facing.getClockWise();
+        for (BlockPos tile : tiles) {
+            BlockPos local = tile.offset(-minX, -minY, -minZ);
+            int tileColumn = tile.getX() * right.getStepX() + tile.getZ() * right.getStepZ() - baseA;
+            int tileRow = baseB - tile.getY();
+            float x0 = local.getX() + (tileColumn == 0 ? inset : 0.0F);
+            float x1 = local.getX() + 1.0F - (tileColumn == width - 1 ? inset : 0.0F);
+            float y0 = local.getY() + (tileRow == height - 1 ? inset : 0.0F);
+            float y1 = local.getY() + 1.0F - (tileRow == 0 ? inset : 0.0F);
+            float u0 = (float) tileColumn / width;
+            float u1 = (float) (tileColumn + 1) / width;
+            float v0 = (float) tileRow / height;
+            float v1 = (float) (tileRow + 1) / height;
+            float z0 = local.getZ();
+            switch (facing) {
+                case SOUTH -> {
+                    vertex(consumer, matrix, x0, y1, z0 + 1.001F, u0, v0, fullLight, overlay);
+                    vertex(consumer, matrix, x1, y1, z0 + 1.001F, u1, v0, fullLight, overlay);
+                    vertex(consumer, matrix, x1, y0, z0 + 1.001F, u1, v1, fullLight, overlay);
+                    vertex(consumer, matrix, x0, y0, z0 + 1.001F, u0, v1, fullLight, overlay);
+                }
+                case NORTH -> {
+                    vertex(consumer, matrix, x1, y1, z0 - 0.001F, u0, v0, fullLight, overlay);
+                    vertex(consumer, matrix, x0, y1, z0 - 0.001F, u1, v0, fullLight, overlay);
+                    vertex(consumer, matrix, x0, y0, z0 - 0.001F, u1, v1, fullLight, overlay);
+                    vertex(consumer, matrix, x1, y0, z0 - 0.001F, u0, v1, fullLight, overlay);
+                }
+                case EAST -> {
+                    vertex(consumer, matrix, x1 + 1.001F, y1, z0, u0, v0, fullLight, overlay);
+                    vertex(consumer, matrix, x1 + 1.001F, y1, z0 + 1.0F, u1, v0, fullLight, overlay);
+                    vertex(consumer, matrix, x1 + 1.001F, y0, z0 + 1.0F, u1, v1, fullLight, overlay);
+                    vertex(consumer, matrix, x1 + 1.001F, y0, z0, u0, v1, fullLight, overlay);
+                }
+                case WEST -> {
+                    vertex(consumer, matrix, x0 - 0.001F, y1, z0 + 1.0F, u0, v0, fullLight, overlay);
+                    vertex(consumer, matrix, x0 - 0.001F, y1, z0, u1, v0, fullLight, overlay);
+                    vertex(consumer, matrix, x0 - 0.001F, y0, z0, u1, v1, fullLight, overlay);
+                    vertex(consumer, matrix, x0 - 0.001F, y0, z0 + 1.0F, u0, v1, fullLight, overlay);
+                }
+                default -> {
+                }
             }
         }
         pose.popPose();
+    }
+
+    private static int wallWidth;
+    private static int wallHeight;
+    private static int wallMinA;
+    private static int wallMinB;
+    private static int wallColumn;
+    private static int wallRow;
+
+    /** All monitor blocks of the wall plus the dimensions/offset of the block the receiver touches. */
+    private static java.util.List<BlockPos> wallTiles(Level level, BlockPos start, BlockState startState,
+                                                     Direction facing) {
+        Set<BlockPos> seen = new HashSet<>();
+        ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+        queue.add(start);
+        seen.add(start);
+        int minA = Integer.MAX_VALUE;
+        int maxA = Integer.MIN_VALUE;
+        int minB = Integer.MAX_VALUE;
+        int maxB = Integer.MIN_VALUE;
+        Direction right = facing.getClockWise();
+        while (!queue.isEmpty() && seen.size() < 256) {
+            BlockPos pos = queue.poll();
+            int a = pos.getX() * right.getStepX() + pos.getZ() * right.getStepZ();
+            minA = Math.min(minA, a);
+            maxA = Math.max(maxA, a);
+            minB = Math.min(minB, pos.getY());
+            maxB = Math.max(maxB, pos.getY());
+            for (Direction direction : new Direction[]{Direction.UP, Direction.DOWN, right,
+                    right.getOpposite()}) {
+                BlockPos next = pos.relative(direction);
+                if (seen.contains(next)) {
+                    continue;
+                }
+                BlockState nextState = level.getBlockState(next);
+                if (BuiltInRegistries.BLOCK.getKey(nextState.getBlock()).equals(MONITOR)
+                        && nextState.getBlock() == startState.getBlock()) {
+                    seen.add(next);
+                    queue.add(next);
+                }
+            }
+        }
+        wallWidth = Math.max(1, maxA - minA + 1);
+        wallHeight = Math.max(1, maxB - minB + 1);
+        wallMinA = minA;
+        wallMinB = minB;
+        int a = start.getX() * right.getStepX() + start.getZ() * right.getStepZ();
+        wallColumn = a - minA;
+        wallRow = maxB - start.getY();
+        return new java.util.ArrayList<>(seen);
     }
 
     private static BlockPos findMonitor(Level level, BlockPos receiverPos) {
