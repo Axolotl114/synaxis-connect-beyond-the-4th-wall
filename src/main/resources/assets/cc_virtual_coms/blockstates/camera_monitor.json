@@ -1,19 +1,18 @@
 {
   "variants": {
-    "facing=north": {
-      "model": "cc_virtual_coms:block/camera_monitor",
-      "y": 0
-    },
-    "facing=east": {
-      "model": "cc_virtual_coms:block/camera_monitor",
-      "y": 90
-    },
     "facing=south": {
-      "model": "cc_virtual_coms:block/camera_monitor",
+      "model": "create:block/redstone_link/receiver"
+    },
+    "facing=north": {
+      "model": "create:block/redstone_link/receiver",
       "y": 180
     },
+    "facing=east": {
+      "model": "create:block/redstone_link/receiver",
+      "y": 90
+    },
     "facing=west": {
-      "model": "cc_virtual_coms:block/camera_monitor",
+      "model": "create:block/redstone_link/receiver",
       "y": 270
     }
   }
