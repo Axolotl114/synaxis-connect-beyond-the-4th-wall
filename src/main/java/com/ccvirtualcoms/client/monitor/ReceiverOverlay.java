@@ -12,7 +12,6 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 
 /** Draws all receiver overlays after block entities so they cover CC's monitor screen. */
-@EventBusSubscriber(modid = CCVirtualComs.MOD_ID, bus = EventBusSubscriber.Bus.GAME, value = Dist.CLIENT)
 public final class ReceiverOverlay {
 
     private ReceiverOverlay() {

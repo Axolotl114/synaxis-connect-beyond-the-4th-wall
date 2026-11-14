@@ -45,8 +45,7 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
     @Override
     public void render(CameraMonitorBlockEntity receiver, float partialTick, PoseStack pose,
                        MultiBufferSource buffers, int light, int overlay) {
-        // The overlay is drawn from RenderLevelStageEvent.AFTER_BLOCK_ENTITIES so that it covers
-        // the CC monitor's own (orange "no computer") screen.
+        drawOverlay(receiver, pose, buffers, overlay);
     }
 
     /** Draws the receiver's camera image onto its adjacent CC monitor wall. */
