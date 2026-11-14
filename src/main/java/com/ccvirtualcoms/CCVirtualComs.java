@@ -118,6 +118,9 @@ public final class CCVirtualComs {
                 (payload, context) -> payload.handle(context));
         registrar.playToServer(CameraConfigPayload.TYPE, CameraConfigPayload.STREAM_CODEC,
                 (payload, context) -> payload.handle(context));
+        registrar.playToServer(com.ccvirtualcoms.net.MonitorConfigPayload.TYPE,
+                com.ccvirtualcoms.net.MonitorConfigPayload.STREAM_CODEC,
+                com.ccvirtualcoms.net.MonitorConfigPayload::handle);
         registrar.playToServer(CameraEulerPayload.TYPE, CameraEulerPayload.STREAM_CODEC,
                 (payload, context) -> payload.handle(context));
         registrar.playToClient(CameraStatusPayload.TYPE, CameraStatusPayload.STREAM_CODEC,

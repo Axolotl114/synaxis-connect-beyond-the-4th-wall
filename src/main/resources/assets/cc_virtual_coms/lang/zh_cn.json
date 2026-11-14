@@ -113,5 +113,11 @@
   "cc_virtual_coms.camera.tooltip.priority": "触发优先级（3.4）：\n1. Synaxis 的 enable 端子\n2. 红石输入：\n   原版相邻信号，或\n   A/B 频率槽都放置时的\n   Create 无线红石链路\n3. 界面上的保持开/关\n\n触发源关闭：由保持状态决定。\n触发源开启：\n  enable=true -> 开（忽略红石）\n  enable=false, 信号>阈值\n    -> 保持模式下为开\n  enable=false, 信号<=阈值\n    -> 保持模式下为关\n  切换模式：上升沿翻转\n阈值比较 0-15 的红石信号。",
   "cc_virtual_coms.camera.field.fov": "视场角",
   "cc_virtual_coms.camera.tooltip.fov": "摄像头的垂直视场角（30-120 度），与玩家视场角无关。",
-  "cc_virtual_coms.camera.option.color.green": "绿色灰度"
+  "cc_virtual_coms.camera.option.color.green": "绿色灰度",
+  "block.cc_virtual_coms.camera_monitor": "摄像头显示器",
+  "cc_virtual_coms.monitor.title": "摄像头显示器",
+  "cc_virtual_coms.monitor.on": "画面：开",
+  "cc_virtual_coms.monitor.off": "画面：关",
+  "cc_virtual_coms.monitor.none": "未选择摄像头",
+  "cc_virtual_coms.monitor.hint": "选择摄像头并开关画面"
 }

@@ -25,6 +25,18 @@ public final class CameraClientHooks {
         }
     }
 
+    /** Opens the monitor configuration screen. */
+    public static void openMonitorScreen(net.minecraft.core.BlockPos pos) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.level == null) {
+            return;
+        }
+        if (minecraft.level.getBlockEntity(pos)
+                instanceof com.ccvirtualcoms.content.monitor.CameraMonitorBlockEntity monitor) {
+            minecraft.setScreen(new com.ccvirtualcoms.client.monitor.CameraMonitorScreen(monitor));
+        }
+    }
+
     /** Returns the camera block entity at {@code pos}, if the client has one. */
     public static @Nullable CameraTransmitterBlockEntity cameraAt(BlockPos pos) {
         Minecraft minecraft = Minecraft.getInstance();
@@ -34,3 +46,4 @@ public final class CameraClientHooks {
         return CameraLocator.find(minecraft.level, pos);
     }
 }
+

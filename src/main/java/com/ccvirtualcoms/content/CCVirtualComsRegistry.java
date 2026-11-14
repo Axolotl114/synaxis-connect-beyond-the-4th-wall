@@ -2,6 +2,8 @@ package com.ccvirtualcoms.content;
 
 import com.ccvirtualcoms.CCVirtualComs;
 import com.ccvirtualcoms.content.camera.CameraTransmitterBlock;
+import com.ccvirtualcoms.content.monitor.CameraMonitorBlock;
+import com.ccvirtualcoms.content.monitor.CameraMonitorBlockEntity;
 import com.ccvirtualcoms.content.camera.CameraTransmitterBlockEntity;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.item.BlockItem;
@@ -62,6 +64,25 @@ public final class CCVirtualComsRegistry {
                     .noOcclusion()
                     .sound(net.minecraft.world.level.block.SoundType.METAL)));
 
+    public static final DeferredBlock<CameraMonitorBlock> CAMERA_MONITOR_BLOCK = BLOCKS.register(
+            "camera_monitor",
+            () -> new CameraMonitorBlock(BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.METAL)
+                    .strength(1.5F)
+                    .noOcclusion()
+                    .sound(net.minecraft.world.level.block.SoundType.METAL)));
+
+    public static final DeferredItem<BlockItem> CAMERA_MONITOR_ITEM = ITEMS.register(
+            "camera_monitor",
+            () -> new BlockItem(CAMERA_MONITOR_BLOCK.get(), new Item.Properties()));
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<CameraMonitorBlockEntity>>
+            CAMERA_MONITOR_BE = BLOCK_ENTITY_TYPES.register(
+                    "camera_monitor",
+                    () -> BlockEntityType.Builder
+                            .of(CameraMonitorBlockEntity::new, CAMERA_MONITOR_BLOCK.get())
+                            .build(null));
+
     public static final DeferredItem<BlockItem> CAMERA_TRANSMITTER_ITEM = ITEMS.register(
             "camera_transmitter",
             () -> new BlockItem(CAMERA_TRANSMITTER_BLOCK.get(), new Item.Properties()));
@@ -82,6 +103,7 @@ public final class CCVirtualComsRegistry {
                     .displayItems((parameters, output) -> {
                         output.accept(VIRTUAL_COMS_ITEM.get());
                         output.accept(CAMERA_TRANSMITTER_ITEM.get());
+                        output.accept(CAMERA_MONITOR_ITEM.get());
                     })
                     .build());
 
