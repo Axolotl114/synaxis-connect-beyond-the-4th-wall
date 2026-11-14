@@ -95,7 +95,7 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
                 (disappearDistance - distance) / (disappearDistance - fadeStart)));
         int effectiveOpacity = Math.round(projector.opacity() * fade);
         ResourceLocation texture = upload(projector, frame, config, width / height,
-                effectiveOpacity, texSize);
+                effectiveOpacity, texSize, veryNear);
         BlockState state = projector.getBlockState();
         Direction facing = state.getOptionalValue(CameraMonitorBlock.FACING).orElse(Direction.SOUTH);
         pose.pushPose();
@@ -126,7 +126,7 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
 
     private static ResourceLocation upload(CameraMonitorBlockEntity projector, CameraFrame frame,
                                           CameraConfig config, double aspect, int opacity,
-                                          int texSize) {
+                                          int texSize, boolean veryNear) {
         long key = projector.getBlockPos().asLong();
         ResourceLocation id = ResourceLocation.fromNamespaceAndPath(CCVirtualComs.MOD_ID,
                 "projector/" + Long.toHexString(key));
