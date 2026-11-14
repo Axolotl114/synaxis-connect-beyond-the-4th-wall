@@ -112,6 +112,9 @@ public final class CameraCapturePipeline {
     private org.joml.Matrix4f captureProjection;
     private volatile org.joml.Quaternionf captureCameraRotation;
     private net.minecraft.world.phys.Vec3 captureCameraPosition;
+    private float captureYaw;
+    private float capturePitch;
+    private float captureRoll;
     private boolean mainTargetFlickerLogged;
     private boolean mainFrameLogged;
 
@@ -284,6 +287,9 @@ public final class CameraCapturePipeline {
         this.override = new CameraOverride(
                 new Vec3(resolved.pose().x(), resolved.pose().y(), resolved.pose().z()),
                 resolved.pose().yaw(), resolved.pose().pitch(), resolved.pose().roll());
+        this.captureYaw = resolved.pose().yaw();
+        this.capturePitch = resolved.pose().pitch();
+        this.captureRoll = resolved.pose().roll();
         this.pending = new PendingCapture(best, bestSession, resolution.width(),
                 resolution.height(), now);
         this.savedRenderHand = false;
@@ -336,7 +342,11 @@ public final class CameraCapturePipeline {
                         com.mojang.blaze3d.systems.RenderSystem.getVertexSorting());
             }
             com.mojang.blaze3d.vertex.PoseStack pose = new com.mojang.blaze3d.vertex.PoseStack();
-            pose.mulPose(this.captureCameraRotation);
+            org.joml.Quaternionf maskRotation = new org.joml.Quaternionf().rotationYXZ(
+                    (float) Math.toRadians(this.captureYaw) - (float) Math.PI,
+                    (float) Math.toRadians(this.capturePitch),
+                    (float) Math.toRadians(this.captureRoll));
+            pose.mulPose(maskRotation);
             net.minecraft.client.renderer.MultiBufferSource.BufferSource buffers =
                     minecraft.renderBuffers().bufferSource();
             float partialTick = CameraCaptureRuntime.get().partialTick();
