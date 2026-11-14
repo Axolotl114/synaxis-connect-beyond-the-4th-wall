@@ -110,7 +110,7 @@ public final class CameraCapturePipeline {
     private long lastReadbackNanos;
     private long lastCaptureNanos;
     private org.joml.Matrix4f captureProjection;
-    private org.joml.Quaternionf captureCameraRotation;
+    private volatile org.joml.Quaternionf captureCameraRotation;
     private net.minecraft.world.phys.Vec3 captureCameraPosition;
     private boolean mainTargetFlickerLogged;
     private boolean mainFrameLogged;
@@ -318,7 +318,9 @@ public final class CameraCapturePipeline {
         if (minecraft.level == null || this.captureCameraRotation == null) {
             return null;
         }
-        com.mojang.blaze3d.pipeline.TextureTarget target = this.ensureMaskTarget(width, height);
+        int maskWidth = minecraft.getMainRenderTarget().width;
+        int maskHeight = minecraft.getMainRenderTarget().height;
+        com.mojang.blaze3d.pipeline.TextureTarget target = this.ensureMaskTarget(maskWidth, maskHeight);
         if (target == null) {
             return null;
         }
@@ -327,7 +329,7 @@ public final class CameraCapturePipeline {
         try {
             target.clear(Minecraft.ON_OSX);
             target.bindWrite(true);
-            com.mojang.blaze3d.systems.RenderSystem.viewport(0, 0, width, height);
+            com.mojang.blaze3d.systems.RenderSystem.viewport(0, 0, maskWidth, maskHeight);
             if (this.captureProjection != null) {
                 com.mojang.blaze3d.systems.RenderSystem.setProjectionMatrix(
                         this.captureProjection,
@@ -353,19 +355,33 @@ public final class CameraCapturePipeline {
                 pose.popPose();
             }
             buffers.endBatch();
-            int byteSize = width * height * 4;
+            int byteSize = maskWidth * maskHeight * 4;
             java.nio.ByteBuffer pixels = org.lwjgl.BufferUtils.createByteBuffer(byteSize);
             com.mojang.blaze3d.platform.GlStateManager._glBindFramebuffer(
                     org.lwjgl.opengl.GL30.GL_READ_FRAMEBUFFER, target.frameBufferId);
-            org.lwjgl.opengl.GL11.glReadPixels(0, 0, width, height,
+            org.lwjgl.opengl.GL11.glReadPixels(0, 0, maskWidth, maskHeight,
                     org.lwjgl.opengl.GL11.GL_RGBA, org.lwjgl.opengl.GL11.GL_UNSIGNED_BYTE, pixels);
             com.mojang.blaze3d.platform.GlStateManager._glBindFramebuffer(
                     org.lwjgl.opengl.GL30.GL_READ_FRAMEBUFFER, 0);
+            double destinationAspect = (double) width / (double) height;
+            double sourceAspect = (double) maskWidth / (double) maskHeight;
+            int cropX = 0;
+            int cropY = 0;
+            int cropWidth = maskWidth;
+            int cropHeight = maskHeight;
+            if (sourceAspect > destinationAspect) {
+                cropWidth = (int) Math.round(maskHeight * destinationAspect);
+                cropX = (maskWidth - cropWidth) / 2;
+            } else if (sourceAspect < destinationAspect) {
+                cropHeight = (int) Math.round(maskWidth / destinationAspect);
+                cropY = (maskHeight - cropHeight) / 2;
+            }
             float[] mask = new float[width * height];
             for (int y = 0; y < height; y++) {
-                int sourceRow = (height - 1 - y) * width * 4;
+                int sourceY = cropY + (int) ((long) (height - 1 - y) * cropHeight / height);
                 for (int x = 0; x < width; x++) {
-                    int index = sourceRow + x * 4;
+                    int sourceX = cropX + (int) ((long) x * cropWidth / width);
+                    int index = (sourceY * maskWidth + sourceX) * 4;
                     int r = pixels.get(index) & 0xFF;
                     int g = pixels.get(index + 1) & 0xFF;
                     int b = pixels.get(index + 2) & 0xFF;
@@ -456,9 +472,6 @@ public final class CameraCapturePipeline {
         // The projection that produced this camera frame (used by the entity mask pass).
         this.captureProjection = new org.joml.Matrix4f(
                 com.mojang.blaze3d.systems.RenderSystem.getProjectionMatrix());
-        net.minecraft.client.Camera frameCamera = minecraft.gameRenderer.getMainCamera();
-        this.captureCameraRotation = new org.joml.Quaternionf(frameCamera.rotation());
-        this.captureCameraPosition = frameCamera.getPosition();
         boolean issued = false;
         try {
             ReadbackTarget target = capture.session.readbackTarget(capture.width, capture.height);
@@ -523,6 +536,12 @@ public final class CameraCapturePipeline {
     }
 
     /** {@code true} while the pipeline is rendering its own camera frame. */
+    /** Called from the camera mixin right after the capture pose is applied. */
+    public void captureFrameCamera(net.minecraft.client.Camera camera) {
+        this.captureCameraRotation = new org.joml.Quaternionf(camera.rotation());
+        this.captureCameraPosition = camera.getPosition();
+    }
+
     /** Key of the camera whose view is being rendered right now, or {@code -1}. */
     public long activeCaptureKey() {
         PendingCapture capture = this.pending;
