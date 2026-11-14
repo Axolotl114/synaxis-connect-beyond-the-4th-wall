@@ -240,6 +240,9 @@ public class CameraTransmitterBlockEntity extends BlockEntity
         if (newRevision < this.revision) {
             return; // stale snapshot must not roll the configuration back
         }
+        // Only a strictly newer revision may overwrite the locally edited Euler angles; an equal
+        // revision update (e.g. triggered by an unrelated block update) used to reset them.
+        boolean applyEuler = newRevision > this.revision;
         if (snapshotConfig != null) {
             this.config = snapshotConfig;
         }
@@ -247,10 +250,12 @@ public class CameraTransmitterBlockEntity extends BlockEntity
         this.clientDeviceName = deviceName == null ? "" : deviceName;
         this.clientStreamUrl = streamUrl == null ? "" : streamUrl;
         this.redstoneSignal = signal;
-        this.eulerYaw = normalizeYaw(snapshotYaw);
-        this.eulerPitch = clampPitch(snapshotPitch);
-        this.eulerRoll = normalizeRoll(snapshotRoll);
-        this.revision = newRevision;
+        if (applyEuler) {
+            this.eulerYaw = normalizeYaw(snapshotYaw);
+            this.eulerPitch = clampPitch(snapshotPitch);
+            this.eulerRoll = normalizeRoll(snapshotRoll);
+            this.revision = newRevision;
+        }
         if (detail != null) {
             this.statusDetail = detail;
         }
