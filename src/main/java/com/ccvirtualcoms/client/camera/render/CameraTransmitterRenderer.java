@@ -100,10 +100,12 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
                         .eulerFromRotation(worldToLocal, new float[3]);
                 float useYaw = camera.config().yawMode() == com.ccvirtualcoms.camera.CameraAxisMode.WORLD_STABLE
                         ? worldLocal[0] : (float) yaw;
+                // The model hierarchy applies Rx(-pitch) and Rz(+roll); the world->local Euler
+                // decomposition has the opposite signs for these two components.
                 float usePitch = camera.config().pitchMode() == com.ccvirtualcoms.camera.CameraAxisMode.WORLD_STABLE
-                        ? worldLocal[1] : (float) pitch;
+                        ? -worldLocal[1] : (float) pitch;
                 float useRoll = camera.config().rollMode() == com.ccvirtualcoms.camera.CameraAxisMode.WORLD_STABLE
-                        ? worldLocal[2] : (float) roll;
+                        ? -worldLocal[2] : (float) roll;
                 org.joml.Quaterniond worldRotation = com.ccvirtualcoms.client.camera.capture.CameraTransformMath
                         .cameraRotation(useYaw, usePitch, useRoll);
                 org.joml.Quaterniond modelRotation = new org.joml.Quaterniond(subRotation)
