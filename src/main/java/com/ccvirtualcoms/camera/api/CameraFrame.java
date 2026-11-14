@@ -14,8 +14,7 @@ package com.ccvirtualcoms.camera.api;
  * @param captureNanos {@link System#nanoTime()} at capture
  * @param rgba         packed RGBA pixels, {@code width * height * 4} bytes
  */
-public record CameraFrame(int width, int height, int sequence, long captureNanos, byte[] rgba,
-                          float[] mask) {
+public record CameraFrame(int width, int height, int sequence, long captureNanos, byte[] rgba) {
 
     public CameraFrame {
         if (width <= 0 || height <= 0) {
@@ -23,9 +22,6 @@ public record CameraFrame(int width, int height, int sequence, long captureNanos
         }
         if (rgba == null || rgba.length != width * height * 4) {
             throw new IllegalArgumentException("RGBA buffer does not match " + width + "x" + height);
-        }
-        if (mask != null && mask.length != width * height) {
-            throw new IllegalArgumentException("mask buffer does not match " + width + "x" + height);
         }
     }
 
@@ -52,13 +48,5 @@ public record CameraFrame(int width, int height, int sequence, long captureNanos
     /** Alpha channel of the pixel at (x, y). */
     public int alpha(int x, int y) {
         return this.rgba[(y * this.width + x) * 4 + 3] & 0xFF;
-    }
-
-    /** Night-vision proximity mask value at (x, y): 1 = brighten (sub-level/entity), 0 = keep. */
-    public float maskAt(int x, int y) {
-        if (this.mask == null) {
-            return 0.0F;
-        }
-        return this.mask[y * this.width + x];
     }
 }

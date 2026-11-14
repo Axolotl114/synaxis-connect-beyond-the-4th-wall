@@ -52,6 +52,7 @@ public record CameraConfig(
         int fps,
         boolean color,
         boolean nightVision,
+        boolean green,
         boolean redstoneControl,
         boolean holdOn,
         CameraRedstoneMode redstoneMode,
@@ -80,6 +81,7 @@ public record CameraConfig(
             CameraResolution.DEFAULT,
             30,
             true,
+            false,
             false,
             false,
             false,
@@ -144,6 +146,7 @@ public record CameraConfig(
                 safeFps,
                 this.color,
                 this.nightVision,
+                this.green,
                 this.redstoneControl,
                 this.holdOn,
                 this.redstoneMode,
@@ -163,91 +166,98 @@ public record CameraConfig(
     // ------------------------------------------------------------------ copy helpers
 
     public CameraConfig withResolution(CameraResolution value) {
-        return new CameraConfig(value, this.fps, this.color, this.nightVision, this.redstoneControl,
+        return new CameraConfig(value, this.fps, this.color, this.nightVision, this.green, this.redstoneControl,
                 this.holdOn, this.redstoneMode, this.redstoneThreshold, this.frequencyA, this.frequencyB,
                 this.yawMode, this.pitchMode, this.rollMode, this.offsetX, this.offsetY, this.offsetZ,
                 this.renderMode, this.fov);
     }
 
     public CameraConfig withFps(int value) {
-        return new CameraConfig(this.resolution, clampFps(value), this.color, this.nightVision,
+        return new CameraConfig(this.resolution, clampFps(value), this.color, this.nightVision, this.green,
                 this.redstoneControl, this.holdOn, this.redstoneMode, this.redstoneThreshold, this.frequencyA,
                 this.frequencyB, this.yawMode, this.pitchMode, this.rollMode, this.offsetX, this.offsetY,
                 this.offsetZ, this.renderMode, this.fov);
     }
 
     public CameraConfig withFov(int value) {
-        return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision,
+        return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision, this.green,
                 this.redstoneControl, this.holdOn, this.redstoneMode, this.redstoneThreshold,
                 this.frequencyA, this.frequencyB, this.yawMode, this.pitchMode, this.rollMode,
                 this.offsetX, this.offsetY, this.offsetZ, this.renderMode, clampFov(value));
     }
 
     public CameraConfig withColor(boolean value) {
-        return new CameraConfig(this.resolution, this.fps, value, this.nightVision, this.redstoneControl,
+        return new CameraConfig(this.resolution, this.fps, value, this.nightVision, this.green, this.redstoneControl,
                 this.holdOn, this.redstoneMode, this.redstoneThreshold, this.frequencyA, this.frequencyB,
                 this.yawMode, this.pitchMode, this.rollMode, this.offsetX, this.offsetY, this.offsetZ,
                 this.renderMode, this.fov);
     }
 
     public CameraConfig withNightVision(boolean value) {
-        return new CameraConfig(this.resolution, this.fps, this.color, value, this.redstoneControl,
+        return new CameraConfig(this.resolution, this.fps, this.color, value, this.green, this.redstoneControl,
                 this.holdOn, this.redstoneMode, this.redstoneThreshold, this.frequencyA, this.frequencyB,
                 this.yawMode, this.pitchMode, this.rollMode, this.offsetX, this.offsetY, this.offsetZ,
                 this.renderMode, this.fov);
     }
 
-    public CameraConfig withRedstoneControl(boolean value) {
+    public CameraConfig withGreen(boolean value) {
         return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision, value,
+                this.redstoneControl, this.holdOn, this.redstoneMode, this.redstoneThreshold,
+                this.frequencyA, this.frequencyB, this.yawMode, this.pitchMode, this.rollMode,
+                this.offsetX, this.offsetY, this.offsetZ, this.renderMode, this.fov);
+    }
+
+    public CameraConfig withRedstoneControl(boolean value) {
+        return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision, this.green, value,
                 this.holdOn, this.redstoneMode, this.redstoneThreshold, this.frequencyA, this.frequencyB,
                 this.yawMode, this.pitchMode, this.rollMode, this.offsetX, this.offsetY, this.offsetZ,
                 this.renderMode, this.fov);
     }
 
     public CameraConfig withHoldOn(boolean value) {
-        return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision,
+        return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision, this.green,
                 this.redstoneControl, value, this.redstoneMode, this.redstoneThreshold, this.frequencyA,
                 this.frequencyB, this.yawMode, this.pitchMode, this.rollMode, this.offsetX, this.offsetY,
                 this.offsetZ, this.renderMode, this.fov);
     }
 
     public CameraConfig withRedstoneMode(CameraRedstoneMode value) {
-        return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision,
+        return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision, this.green,
                 this.redstoneControl, this.holdOn, value, this.redstoneThreshold, this.frequencyA,
                 this.frequencyB, this.yawMode, this.pitchMode, this.rollMode, this.offsetX, this.offsetY,
                 this.offsetZ, this.renderMode, this.fov);
     }
 
     public CameraConfig withRedstoneThreshold(int value) {
-        return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision,
+        return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision, this.green,
                 this.redstoneControl, this.holdOn, this.redstoneMode, value, this.frequencyA,
                 this.frequencyB, this.yawMode, this.pitchMode, this.rollMode, this.offsetX, this.offsetY,
                 this.offsetZ, this.renderMode, this.fov);
     }
 
     public CameraConfig withFrequencies(ItemStack a, ItemStack b) {
-        return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision,
+        return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision, this.green,
                 this.redstoneControl, this.holdOn, this.redstoneMode, this.redstoneThreshold, a, b,
                 this.yawMode, this.pitchMode, this.rollMode, this.offsetX, this.offsetY, this.offsetZ,
                 this.renderMode, this.fov);
     }
 
     public CameraConfig withAxisModes(CameraAxisMode yaw, CameraAxisMode pitch, CameraAxisMode roll) {
-        return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision,
+        return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision, this.green,
                 this.redstoneControl, this.holdOn, this.redstoneMode, this.redstoneThreshold,
                 this.frequencyA, this.frequencyB, yaw, pitch, roll, this.offsetX, this.offsetY,
                 this.offsetZ, this.renderMode, this.fov);
     }
 
     public CameraConfig withOffset(double x, double y, double z) {
-        return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision,
+        return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision, this.green,
                 this.redstoneControl, this.holdOn, this.redstoneMode, this.redstoneThreshold,
                 this.frequencyA, this.frequencyB, this.yawMode, this.pitchMode, this.rollMode,
                 x, y, z, this.renderMode, this.fov);
     }
 
     public CameraConfig withRenderMode(CameraRenderMode value) {
-        return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision,
+        return new CameraConfig(this.resolution, this.fps, this.color, this.nightVision, this.green,
                 this.redstoneControl, this.holdOn, this.redstoneMode, this.redstoneThreshold,
                 this.frequencyA, this.frequencyB, this.yawMode, this.pitchMode, this.rollMode,
                 this.offsetX, this.offsetY, this.offsetZ, value, this.fov);
@@ -259,6 +269,7 @@ public record CameraConfig(
     private static final String TAG_FPS = "Fps";
     private static final String TAG_COLOR = "Color";
     private static final String TAG_NIGHT_VISION = "NightVision";
+    private static final String TAG_GREEN = "GreenGrayscale";
     private static final String TAG_REDSTONE_CONTROL = "RedstoneControl";
     private static final String TAG_HOLD_ON = "HoldOn";
     private static final String TAG_REDSTONE_MODE = "RedstoneMode";
@@ -284,6 +295,7 @@ public record CameraConfig(
         tag.putInt(TAG_FPS, this.fps);
         tag.putBoolean(TAG_COLOR, this.color);
         tag.putBoolean(TAG_NIGHT_VISION, this.nightVision);
+        tag.putBoolean(TAG_GREEN, this.green);
         tag.putBoolean(TAG_REDSTONE_CONTROL, this.redstoneControl);
         tag.putBoolean(TAG_HOLD_ON, this.holdOn);
         tag.putString(TAG_REDSTONE_MODE, this.redstoneMode.serializedName());
@@ -321,6 +333,7 @@ public record CameraConfig(
                 tag.contains(TAG_FPS) ? tag.getInt(TAG_FPS) : fallback.fps,
                 !tag.contains(TAG_COLOR) || tag.getBoolean(TAG_COLOR),
                 tag.contains(TAG_NIGHT_VISION) && tag.getBoolean(TAG_NIGHT_VISION),
+                tag.contains(TAG_GREEN) && tag.getBoolean(TAG_GREEN),
                 tag.contains(TAG_REDSTONE_CONTROL) && tag.getBoolean(TAG_REDSTONE_CONTROL),
                 tag.contains(TAG_HOLD_ON) && tag.getBoolean(TAG_HOLD_ON),
                 CameraRedstoneMode.byNameOrDefault(tag.getString(TAG_REDSTONE_MODE)),
@@ -377,7 +390,7 @@ public record CameraConfig(
     /** A short signature used to detect real configuration changes cheaply. */
     public String signature() {
         return String.join("|", String.valueOf(this.resolution.width()), String.valueOf(this.resolution.height()),
-                String.valueOf(this.fps), String.valueOf(this.color), String.valueOf(this.nightVision),
+                String.valueOf(this.fps), String.valueOf(this.color), String.valueOf(this.nightVision), String.valueOf(this.green),
                 String.valueOf(this.redstoneControl), String.valueOf(this.holdOn),
                 this.redstoneMode.serializedName(), String.valueOf(this.redstoneThreshold),
                 stackSignature(this.frequencyA), stackSignature(this.frequencyB),

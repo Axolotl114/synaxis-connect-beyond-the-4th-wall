@@ -448,11 +448,21 @@ public class CameraTransmitterScreen extends Screen {
                 this::cycleFps,
                 Tooltip.create(Component.translatable("cc_virtual_coms.camera.tooltip.fps")));
 
-        this.addToggle(4, "cc_virtual_coms.camera.field.color",
-                () -> this.config.color(),
-                () -> Component.translatable("cc_virtual_coms.camera.option.color.color"),
-                () -> Component.translatable("cc_virtual_coms.camera.option.color.mono"),
-                () -> this.markChanged(this.config.withColor(!this.config.color())),
+        this.addCycle(4, "cc_virtual_coms.camera.field.color",
+                () -> this.config.color()
+                        ? Component.translatable("cc_virtual_coms.camera.option.color.color")
+                        : this.config.green()
+                                ? Component.translatable("cc_virtual_coms.camera.option.color.green")
+                                : Component.translatable("cc_virtual_coms.camera.option.color.mono"),
+                direction -> {
+                    if (this.config.color()) {
+                        this.markChanged(this.config.withColor(false).withGreen(false));
+                    } else if (!this.config.green()) {
+                        this.markChanged(this.config.withGreen(true));
+                    } else {
+                        this.markChanged(this.config.withGreen(false).withColor(true));
+                    }
+                },
                 Tooltip.create(Component.translatable("cc_virtual_coms.camera.tooltip.color")));
 
         this.addRowLabel(6, "cc_virtual_coms.camera.field.fov");

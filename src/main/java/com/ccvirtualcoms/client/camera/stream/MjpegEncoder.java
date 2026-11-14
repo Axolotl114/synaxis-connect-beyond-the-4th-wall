@@ -207,10 +207,12 @@ public final class MjpegEncoder {
         // Monochrome + night vision is a false-colour thermal palette, so that combination needs an
         // RGB raster even though the user asked for "monochrome". Writing three channels into a
         // single-channel grey raster used to throw and silently keep the previous frame.
-        boolean falseColour = !colour && nightVision;
+        boolean greenMode = !colour && config.green();
+        boolean falseColour = !colour && nightVision && !greenMode;
 
         BufferedImage image = new BufferedImage(targetWidth, targetHeight,
-                (colour || falseColour) ? BufferedImage.TYPE_3BYTE_BGR : BufferedImage.TYPE_BYTE_GRAY);
+                (colour || falseColour || greenMode) ? BufferedImage.TYPE_3BYTE_BGR
+                        : BufferedImage.TYPE_BYTE_GRAY);
         byte[] destination = ((DataBufferByte) image.getRaster().getDataBuffer()).getData();
         byte[] source = frame.rgba();
         int sourceWidth = frame.width();
@@ -242,18 +244,27 @@ public final class MjpegEncoder {
                         destination[destinationIndex++] = (byte) green;
                         destination[destinationIndex++] = (byte) red;
                     }
+                } else if (greenMode) {
+                    // Green phosphor look; night vision adds the light-amplifier gain.
+                    int channel = nightVision
+                            ? (int) Math.round(Math.pow(luma / 255.0D, 0.72D) * 255.0D * 2.2D)
+                            : (int) Math.round(luma * 1.15D);
+                    channel = Math.max(0, Math.min(255, channel));
+                    int r = (channel * 42) / 255;
+                    int b = (channel * 30) / 255;
+                    destination[destinationIndex++] = (byte) b;
+                    destination[destinationIndex++] = (byte) channel;
+                    destination[destinationIndex++] = (byte) r;
                 } else if (nightVision) {
                     // White-hot thermal look: hot objects go to white instead of the old red
                     // iron-bow palette, and the gain/gamma lifts dark entities and sub-levels.
                     int hot = thermalLuma(luma);
-                    int white = Math.max(0, Math.min(255, (int) Math.round(hot * 1.35D + 22.0D)));
-                    if (frame.maskAt(sourceX, sourceY) > 0.5F) {
-                        // Entities: strong lift.
-                        white = Math.max(0, Math.min(255, (int) Math.round(white * 2.0D + 45.0D)));
-                    } else if (hot >= 190) {
-                        // Bright light sources / strongly lit surfaces (sub-levels included) get a
-                        // mild gain; ordinary terrain keeps the base brightness.
-                        white = Math.max(0, Math.min(255, white + 35));
+                    // Brightness gain: lift the whole night-vision image, and give very bright
+                    // pixels (light sources, lit surfaces) an extra boost.
+                    int white = Math.max(0, Math.min(255, (int) Math.round(
+                            Math.pow(hot / 255.0D, 0.78D) * 255.0D * 2.6D)));
+                    if (hot >= 190) {
+                        white = Math.min(255, white + 35);
                     }
                     int r = Math.min(255, white + 6);
                     int g = white;

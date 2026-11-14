@@ -112,5 +112,6 @@
   "cc_virtual_coms.camera.tooltip.done": "Close the screen. All changes\nare already sent to the server.",
   "cc_virtual_coms.camera.tooltip.priority": "Trigger priority (3.4):\n1. Synaxis enable terminal\n2. Redstone input:\n   vanilla neighbours, or\n   Create wireless link when\n   frequency A and B are set\n3. GUI hold state\n\nSource OFF: hold state wins.\nSource ON:\n  enable=true -> ON (RS ignored)\n  enable=false, signal>thr\n    -> ON in HOLD mode\n  enable=false, signal<=thr\n    -> OFF in HOLD mode\n  TOGGLE: rising edge flips\nThreshold compares 0-15 signal.",
   "cc_virtual_coms.camera.field.fov": "Field of view",
-  "cc_virtual_coms.camera.tooltip.fov": "Camera vertical field of view in degrees (30-120). Independent of the player FOV."
+  "cc_virtual_coms.camera.tooltip.fov": "Camera vertical field of view in degrees (30-120). Independent of the player FOV.",
+  "cc_virtual_coms.camera.option.color.green": "Green"
 }

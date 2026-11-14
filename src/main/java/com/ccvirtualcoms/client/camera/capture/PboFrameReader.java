@@ -43,7 +43,6 @@ public final class PboFrameReader implements AutoCloseable {
     private final int[] buffers = new int[BUFFER_COUNT];
     private final long[] fences = new long[BUFFER_COUNT];
     private final boolean[] inFlight = new boolean[BUFFER_COUNT];
-    private final float[][] slotMasks = new float[BUFFER_COUNT][];
 
     private int cursor;
     private boolean closed;
@@ -109,11 +108,6 @@ public final class PboFrameReader implements AutoCloseable {
      * frame instead of waiting.
      */
     public boolean requestFramebufferRead(int frameBufferId) {
-        return this.requestFramebufferRead(frameBufferId, null);
-    }
-
-    /** Issues a readback and binds a night-vision mask to the returned frame. */
-    public boolean requestFramebufferRead(int frameBufferId, float[] mask) {
         RenderSystem.assertOnRenderThread();
         if (this.closed) {
             return false;
@@ -130,7 +124,6 @@ public final class PboFrameReader implements AutoCloseable {
         this.fences[index] = GL32.glFenceSync(GL32.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
         GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER, 0);
         this.inFlight[index] = true;
-        this.slotMasks[index] = mask;
         this.issuedReads++;
         return true;
     }
@@ -174,8 +167,6 @@ public final class PboFrameReader implements AutoCloseable {
     }
 
     private @Nullable CameraFrame drain(int index, int sequence, long captureNanos) {
-        float[] slotMask = this.slotMasks[index];
-        this.slotMasks[index] = null;
         GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER, this.buffers[index]);
         ByteBuffer mapped = GL15.glMapBuffer(GL21.GL_PIXEL_PACK_BUFFER, GL15.GL_READ_ONLY);
         if (mapped == null) {
@@ -183,7 +174,7 @@ public final class PboFrameReader implements AutoCloseable {
             return null;
         }
         try {
-            return flipToFrame(mapped, sequence, captureNanos, slotMask);
+            return flipToFrame(mapped, sequence, captureNanos);
         } finally {
             GL15.glUnmapBuffer(GL21.GL_PIXEL_PACK_BUFFER);
             GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER, 0);
@@ -191,7 +182,7 @@ public final class PboFrameReader implements AutoCloseable {
     }
 
     /** Converts bottom-up RGBA bytes into a top-first RGBA {@link CameraFrame}. */
-    private CameraFrame flipToFrame(ByteBuffer mapped, int sequence, long captureNanos, float[] mask) {
+    private CameraFrame flipToFrame(ByteBuffer mapped, int sequence, long captureNanos) {
         byte[] rgba = new byte[this.byteSize];
         int rowBytes = this.width * 4;
         for (int y = 0; y < this.height; y++) {
@@ -207,7 +198,7 @@ public final class PboFrameReader implements AutoCloseable {
                 rgba[dest + 3] = (byte) 0xFF;
             }
         }
-        return new CameraFrame(this.width, this.height, sequence, captureNanos, rgba, mask);
+        return new CameraFrame(this.width, this.height, sequence, captureNanos, rgba);
     }
 
     private int freeSlot() {

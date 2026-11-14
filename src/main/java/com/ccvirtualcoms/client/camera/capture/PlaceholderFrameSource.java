@@ -124,7 +124,7 @@ public final class PlaceholderFrameSource implements CameraFrameSource {
 
     private synchronized CameraFrame produce(long nowNanos) {
         byte[] rgba = renderGradient(nowNanos);
-        CameraFrame frame = new CameraFrame(this.width, this.height, ++this.sequence, nowNanos, rgba, null);
+        CameraFrame frame = new CameraFrame(this.width, this.height, ++this.sequence, nowNanos, rgba);
         this.latest = frame;
         this.lastProduceNanos = nowNanos;
         this.producedFrames++;

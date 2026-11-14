@@ -103,6 +103,7 @@ public record CameraConfigPayload(BlockPos pos, CameraConfig config) implements 
             buffer.writeVarInt(config.fps());
             buffer.writeBoolean(config.color());
             buffer.writeBoolean(config.nightVision());
+            buffer.writeBoolean(config.green());
             buffer.writeBoolean(config.redstoneControl());
             buffer.writeBoolean(config.holdOn());
             buffer.writeVarInt(config.redstoneMode().ordinal());
@@ -125,6 +126,7 @@ public record CameraConfigPayload(BlockPos pos, CameraConfig config) implements 
             int fps = buffer.readVarInt();
             boolean color = buffer.readBoolean();
             boolean nightVision = buffer.readBoolean();
+            boolean green = buffer.readBoolean();
             boolean redstoneControl = buffer.readBoolean();
             boolean holdOn = buffer.readBoolean();
             CameraRedstoneMode redstoneMode = ordinal(CameraRedstoneMode.values(), buffer.readVarInt(),
@@ -146,6 +148,7 @@ public record CameraConfigPayload(BlockPos pos, CameraConfig config) implements 
                     fps,
                     color,
                     nightVision,
+                    green,
                     redstoneControl,
                     holdOn,
                     redstoneMode,

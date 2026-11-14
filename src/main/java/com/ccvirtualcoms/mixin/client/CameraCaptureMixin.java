@@ -52,7 +52,6 @@ public abstract class CameraCaptureMixin implements CaptureCameraAccess {
         if (override != null) {
             this.setPosition(override.position());
             this.setRotation(override.yaw(), override.pitch(), override.roll());
-            CameraCapturePipeline.get().captureFrameCamera((net.minecraft.client.Camera) (Object) this);
         }
     }
 }
