@@ -59,8 +59,12 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         CameraConfig config = camera == null ? CameraConfig.DEFAULT : camera.config();
         float width = (float) projector.projectorWidth();
         float height = (float) projector.projectorHeight();
+        double fadeStart = 256.0D / 3.0D;
+        float fade = (float) Math.max(0.0D, Math.min(1.0D,
+                (256.0D - distance) / (256.0D - fadeStart)));
+        int effectiveOpacity = Math.round(projector.opacity() * fade);
         ResourceLocation texture = upload(projector, frame, config, width / height,
-                projector.opacity(), texSize);
+                effectiveOpacity, texSize);
         BlockState state = projector.getBlockState();
         Direction facing = state.getOptionalValue(CameraMonitorBlock.FACING).orElse(Direction.SOUTH);
         pose.pushPose();

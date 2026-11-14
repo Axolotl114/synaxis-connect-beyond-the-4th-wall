@@ -161,6 +161,11 @@ public class CameraMonitorScreen extends Screen {
     }
 
     @Override
+    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        graphics.fill(0, 0, this.width, this.height, 0xC0101018);
+    }
+
+    @Override
     public boolean isPauseScreen() {
         return false;
     }

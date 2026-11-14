@@ -199,6 +199,8 @@ public final class MjpegEncoder {
 
     // ------------------------------------------------------------------ pixel conversion
 
+    private static final ThreadLocal<BufferedImage> IMAGE_CACHE = new ThreadLocal<>();
+
     private static BufferedImage toImage(CameraFrame frame, CameraConfig config) {
         int targetWidth = config.resolution().width();
         int targetHeight = config.resolution().height();
@@ -210,9 +212,14 @@ public final class MjpegEncoder {
         boolean greenMode = !colour && config.green();
         boolean falseColour = !colour && nightVision && !greenMode;
 
-        BufferedImage image = new BufferedImage(targetWidth, targetHeight,
-                (colour || falseColour || greenMode) ? BufferedImage.TYPE_3BYTE_BGR
-                        : BufferedImage.TYPE_BYTE_GRAY);
+        int imageType = (colour || falseColour || greenMode)
+                ? BufferedImage.TYPE_3BYTE_BGR : BufferedImage.TYPE_BYTE_GRAY;
+        BufferedImage image = IMAGE_CACHE.get();
+        if (image == null || image.getWidth() != targetWidth || image.getHeight() != targetHeight
+                || image.getType() != imageType) {
+            image = new BufferedImage(targetWidth, targetHeight, imageType);
+            IMAGE_CACHE.set(image);
+        }
         byte[] destination = ((DataBufferByte) image.getRaster().getDataBuffer()).getData();
         byte[] source = frame.rgba();
         int sourceWidth = frame.width();
