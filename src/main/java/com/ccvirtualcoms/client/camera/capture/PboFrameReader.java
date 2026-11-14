@@ -43,6 +43,8 @@ public final class PboFrameReader implements AutoCloseable {
     private final int[] buffers = new int[BUFFER_COUNT];
     private final long[] fences = new long[BUFFER_COUNT];
     private final boolean[] inFlight = new boolean[BUFFER_COUNT];
+    private final byte[][] framePool = new byte[3][];
+    private int framePoolCursor;
 
     private int cursor;
     private boolean closed;
