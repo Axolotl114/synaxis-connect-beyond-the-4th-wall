@@ -105,6 +105,7 @@ public final class CameraCapturePipeline {
     private long drops;
     private long failures;
     private long lastReadbackNanos;
+    private final java.util.Map<Long, Long> projectorWatch = new java.util.HashMap<>();
     private long lastCaptureNanos;
     private boolean mainTargetFlickerLogged;
     private boolean mainFrameLogged;
@@ -227,7 +228,7 @@ public final class CameraCapturePipeline {
         // Adaptive capture rate: stream at 30 fps only while somebody watches (MJPEG/DirectShow),
         // otherwise idle at 5 fps so an unwatched camera does not keep re-rendering the world.
         boolean watched = com.ccvirtualcoms.client.camera.stream.CameraStreamService.get()
-                .viewerCount() > 0L;
+                .viewerCount() > 0L || this.hasRecentProjectorWatch(now);
         long captureInterval = watched
                 ? STREAMING_CAPTURE_INTERVAL_NANOS
                 : IDLE_CAPTURE_INTERVAL_NANOS;
@@ -365,6 +366,16 @@ public final class CameraCapturePipeline {
     public long activeCaptureKey() {
         PendingCapture capture = this.pending;
         return capture == null ? -1L : capture.camera.key();
+    }
+
+    /** A projector is currently showing frames of this camera. */
+    public void watchProjectorCamera(long cameraKey) {
+        this.projectorWatch.put(cameraKey, System.nanoTime());
+    }
+
+    private boolean hasRecentProjectorWatch(long now) {
+        this.projectorWatch.values().removeIf(time -> now - time > 500_000_000L);
+        return !this.projectorWatch.isEmpty();
     }
 
     public boolean isCapturing() {

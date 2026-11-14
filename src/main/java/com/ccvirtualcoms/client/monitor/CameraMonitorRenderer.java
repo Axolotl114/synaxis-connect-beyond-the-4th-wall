@@ -85,6 +85,8 @@ public class CameraMonitorRenderer implements BlockEntityRenderer<CameraMonitorB
         if (distance > disappearDistance) {
             return;
         }
+        com.ccvirtualcoms.client.camera.capture.CameraCapturePipeline.get()
+                .watchProjectorCamera(projector.cameraPos().asLong());
         CapturedCamera camera = CameraCaptureRuntime.get().camera(projector.cameraPos().asLong());
         CameraFrame frame = camera == null ? null : camera.latestFrame();
         CameraConfig config = camera == null ? CameraConfig.DEFAULT : camera.config();
