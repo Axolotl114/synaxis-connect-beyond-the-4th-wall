@@ -144,13 +144,12 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
         pose.pushPose();
         if (headTarget != null) {
             org.joml.Quaterniond facingQuat = facingQuaternion(facing);
-            float yawAngle = (float) (facing.toYRot() - yaw + 180.0D);
+            float yawAngle = (float) (facing.toYRot() - yaw);
             org.joml.Quaterniond frame = new org.joml.Quaterniond(facingQuat)
                     .mul(new org.joml.Quaterniond().rotationY((float) Math.toRadians(yawAngle)))
                     .mul(new org.joml.Quaterniond().rotationX((float) Math.toRadians(-pitch)));
             org.joml.Quaterniond target = new org.joml.Quaterniond(facingQuat).invert()
-                    .mul(headTarget)
-                    .mul(new org.joml.Quaterniond().rotationY((float) Math.PI));
+                    .mul(headTarget);
             org.joml.Quaterniond delta = frame.invert().mul(target);
             pose.translate(8.0D / 16.0D, CAMERA_PIVOT / 16.0D, 8.0D / 16.0D);
             pose.mulPose(new org.joml.Quaternionf(delta));
