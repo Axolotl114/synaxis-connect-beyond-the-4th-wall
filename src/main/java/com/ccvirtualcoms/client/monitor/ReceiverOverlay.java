@@ -23,19 +23,18 @@ public final class ReceiverOverlay {
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_BLOCK_ENTITIES) {
             return;
         }
-        PoseStack pose = event.getPoseStack();
         Vec3 camera = event.getCamera().getPosition();
         MultiBufferSource.BufferSource buffers = Minecraft.getInstance().renderBuffers().bufferSource();
         for (CameraMonitorBlockEntity receiver : CameraMonitorBlockEntity.clientReceivers()) {
             if (receiver.isRemoved() || receiver.getLevel() == null) {
                 continue;
             }
-            pose.pushPose();
+            PoseStack pose = new PoseStack();
+            pose.mulPose(event.getCamera().rotation());
             pose.translate(receiver.getBlockPos().getX() - camera.x,
                     receiver.getBlockPos().getY() - camera.y,
                     receiver.getBlockPos().getZ() - camera.z);
             CameraMonitorRenderer.drawOverlay(receiver, pose, buffers, 0);
-            pose.popPose();
         }
         buffers.endBatch();
     }
