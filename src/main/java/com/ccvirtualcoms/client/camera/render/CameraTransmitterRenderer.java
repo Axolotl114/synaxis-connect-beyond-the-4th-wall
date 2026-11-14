@@ -102,8 +102,12 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
                         .invert().mul(worldRotation);
                 float[] display = com.ccvirtualcoms.client.camera.capture.CameraTransformMath
                         .eulerFromRotation(modelRotation, new float[3]);
-                // Head-only: keep the frames on the raw angles and aim the head with a quaternion
-                // (no Euler decomposition of the converted pose -> no gimbal-lock roll spinning).
+                // Frames use the per-axis converted angles (world-stable axes counter-rotate the
+                // sub-level, follow axes stay local). Only the head is driven by the quaternion to
+                // avoid gimbal-lock spinning.
+                yaw = display[0];
+                pitch = display[1];
+                roll = display[2];
                 headTarget = new org.joml.Quaterniond(modelRotation);
             }
         }
@@ -126,10 +130,10 @@ public final class CameraTransmitterRenderer implements BlockEntityRenderer<Came
         pose.pushPose();
         if (headTarget != null) {
             org.joml.Quaterniond facingQuat = facingQuaternion(facing);
-            float yawAngle = (float) (facing.toYRot() - rawYaw + 180.0D);
+            float yawAngle = (float) (facing.toYRot() - yaw + 180.0D);
             org.joml.Quaterniond frame = new org.joml.Quaterniond(facingQuat)
                     .mul(new org.joml.Quaterniond().rotationY((float) Math.toRadians(yawAngle)))
-                    .mul(new org.joml.Quaterniond().rotationX((float) Math.toRadians(-rawPitch)));
+                    .mul(new org.joml.Quaterniond().rotationX((float) Math.toRadians(-pitch)));
             org.joml.Quaterniond target = new org.joml.Quaterniond(facingQuat).invert()
                     .mul(headTarget)
                     .mul(new org.joml.Quaterniond().rotationY((float) Math.PI));

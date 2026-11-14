@@ -64,7 +64,7 @@ public class CameraTransmitterScreen extends Screen {
     private static final Predicate<String> DIGITS = value -> value.matches("[0-9]{0,4}");
     private static final Predicate<String> THRESHOLD_DIGITS = value -> value.matches("[0-9]{0,2}");
     private static final Predicate<String> SIGNED_NUMBER =
-            value -> value.matches("-?[0-9]{0,2}(\\.[0-9]{0,3})?");
+            value -> value.matches("-?[0-9]{0,3}(\\.[0-9]{0,3})?");
 
     /** The four tabs, in display order. */
     private enum Page {
